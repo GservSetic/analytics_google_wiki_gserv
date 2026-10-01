@@ -1,0 +1,16 @@
+{
+  "name": "wiki-setic-analytics-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "start": "npx serve ."
+  },
+  "dependencies": {
+    "google-auth-library": "^10.3.0"
+  },
+  "devDependencies": {
+    "vercel": "^48.1.0"
+  }
+}

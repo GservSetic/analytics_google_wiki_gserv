@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f5f8fc" />
+  <title>Analytics · Wiki SETIC</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navegação do dashboard">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40"><path d="M7 11.5 20 5l13 6.5v17L20 35 7 28.5v-17Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="m13 20 4 4 10-10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <strong>Wiki SETIC</strong>
+          <span>Analytics institucional</span>
+        </div>
+      </div>
+
+      <nav class="nav-list">
+        <button class="nav-item active" data-section="overview"><span class="nav-icon">⌂</span><span>Visão geral</span></button>
+        <button class="nav-item" data-section="realtime"><span class="nav-icon">◉</span><span>Tempo real</span></button>
+        <button class="nav-item" data-section="pages"><span class="nav-icon">▤</span><span>Páginas</span></button>
+        <button class="nav-item" data-section="audience"><span class="nav-icon">◎</span><span>Audiência</span></button>
+      </nav>
+
+      <div class="sidebar-status">
+        <span class="status-dot"></span>
+        <div>
+          <strong>GA4 conectado</strong>
+          <span id="sidebarMode">Modo de demonstração</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">MONITORAMENTO DE ACESSOS</p>
+          <h1>Analytics da Wiki SETIC</h1>
+          <p class="subtitle">Indicadores de utilização, comportamento e atividade em tempo real.</p>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="range-switch" role="group" aria-label="Período do relatório">
+            <button class="range-btn active" data-range="today">Hoje</button>
+            <button class="range-btn" data-range="7d">7 dias</button>
+            <button class="range-btn" data-range="30d">30 dias</button>
+          </div>
+          <div class="sync-pill" title="Atualização automática">
+            <span class="sync-pulse"></span>
+            <div><strong id="syncLabel">Sincronizado</strong><span id="lastUpdate">agora</span></div>
+          </div>
+        </div>
+      </header>
+
+      <section class="metric-grid" aria-label="Indicadores principais">
+        <article class="metric-card primary">
+          <div class="metric-heading"><span>Usuários ativos</span><span class="metric-icon">↗</span></div>
+          <strong class="metric-value" id="metricUsers">—</strong>
+          <p class="metric-caption" id="metricUsersCaption">Carregando período...</p>
+        </article>
+        <article class="metric-card">
+          <div class="metric-heading"><span>Sessões</span><span class="metric-icon">◫</span></div>
+          <strong class="metric-value" id="metricSessions">—</strong>
+          <p class="metric-caption">Sessões iniciadas no período</p>
+        </article>
+        <article class="metric-card">
+          <div class="metric-heading"><span>Visualizações</span><span class="metric-icon">◉</span></div>
+          <strong class="metric-value" id="metricViews">—</strong>
+          <p class="metric-caption">Visualizações de páginas</p>
+        </article>
+        <article class="metric-card">
+          <div class="metric-heading"><span>Engajamento</span><span class="metric-icon">⌁</span></div>
+          <strong class="metric-value" id="metricEngagement">—</strong>
+          <p class="metric-caption">Taxa de sessões engajadas</p>
+        </article>
+        <article class="metric-card">
+          <div class="metric-heading"><span>Tempo médio</span><span class="metric-icon">◷</span></div>
+          <strong class="metric-value" id="metricTime">—</strong>
+          <p class="metric-caption">Engajamento por sessão</p>
+        </article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel chart-panel">
+          <div class="panel-header">
+            <div><p class="panel-kicker">TENDÊNCIA</p><h2>Evolução dos acessos</h2></div>
+            <div class="legend"><span><i class="dot blue"></i>Usuários</span><span><i class="dot navy"></i>Visualizações</span></div>
+          </div>
+          <div class="chart-wrap"><svg id="trendChart" viewBox="0 0 760 300" preserveAspectRatio="none" role="img" aria-label="Gráfico de evolução dos acessos"></svg></div>
+        </article>
+
+        <article class="panel realtime-panel">
+          <div class="panel-header compact">
+            <div><p class="panel-kicker live">TEMPO REAL</p><h2>Atividade agora</h2></div>
+            <span class="live-badge"><span></span> últimos 30 min</span>
+          </div>
+          <div class="realtime-main">
+            <div>
+              <span class="big-label">Usuários ativos</span>
+              <strong class="realtime-value" id="realtimeUsers">—</strong>
+              <span class="realtime-note">Atualização automática a cada 15s</span>
+            </div>
+            <div class="mini-bars" id="miniBars" aria-label="Atividade dos últimos minutos"></div>
+          </div>
+          <div class="realtime-stats">
+            <div><span>Visualizações</span><strong id="realtimeViews">—</strong></div>
+            <div><span>Eventos</span><strong id="realtimeEvents">—</strong></div>
+          </div>
+        </article>
+
+        <article class="panel pages-panel">
+          <div class="panel-header compact"><div><p class="panel-kicker">CONTEÚDO</p><h2>Páginas mais acessadas</h2></div><span class="muted">por visualizações</span></div>
+          <div class="rank-list" id="pageList"></div>
+        </article>
+
+        <article class="panel audience-panel">
+          <div class="panel-header compact"><div><p class="panel-kicker">AUDIÊNCIA</p><h2>Dispositivos</h2></div></div>
+          <div class="donut-layout">
+            <div class="donut" id="deviceDonut"><div class="donut-center"><strong id="deviceTotal">—</strong><span>usuários</span></div></div>
+            <div class="device-list" id="deviceList"></div>
+          </div>
+        </article>
+
+        <article class="panel cities-panel">
+          <div class="panel-header compact"><div><p class="panel-kicker">LOCALIZAÇÃO</p><h2>Principais cidades</h2></div><span class="muted">usuários ativos</span></div>
+          <div class="city-list" id="cityList"></div>
+        </article>
+
+        <article class="panel live-pages-panel">
+          <div class="panel-header compact"><div><p class="panel-kicker live">AGORA</p><h2>Páginas em atividade</h2></div><span class="live-badge subtle"><span></span> ao vivo</span></div>
+          <div class="live-page-list" id="livePageList"></div>
+        </article>
+      </section>
+
+      <footer class="footer">
+        <span>Fonte: Google Analytics 4 · Wiki SETIC</span>
+        <span id="footerMode">Dados de demonstração</span>
+      </footer>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="./demo-data.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
