@@ -91,11 +91,45 @@
 
       <section class="dashboard-grid">
         <article class="panel chart-panel">
-          <div class="panel-header">
-            <div><p class="panel-kicker">TENDÊNCIA</p><h2>Evolução dos acessos</h2></div>
-            <div class="legend"><span><i class="dot blue"></i>Usuários</span><span><i class="dot navy"></i>Visualizações</span></div>
+          <div class="panel-header chart-header">
+            <div>
+              <p class="panel-kicker">TENDÊNCIA DE ACESSO</p>
+              <h2 id="trendTitle">Movimento de acessos ao longo do dia</h2>
+              <p class="chart-subtitle" id="trendSubtitle">Veja em quais horários a Wiki recebeu mais usuários e visualizações.</p>
+            </div>
+            <div class="legend chart-legend">
+              <span><i class="dot blue"></i>Usuários ativos</span>
+              <span><i class="dot navy"></i>Visualizações de páginas</span>
+            </div>
           </div>
-          <div class="chart-wrap"><svg id="trendChart" viewBox="0 0 760 300" preserveAspectRatio="none" role="img" aria-label="Gráfico de evolução dos acessos"></svg></div>
+
+          <div class="trend-insights" aria-label="Resumo do gráfico">
+            <div class="trend-insight">
+              <span class="trend-insight-label">Pico do período</span>
+              <strong id="trendPeak">—</strong>
+              <small id="trendPeakDetail">Maior volume registrado</small>
+            </div>
+            <div class="trend-insight">
+              <span class="trend-insight-label">Média de visualizações</span>
+              <strong id="trendAverage">—</strong>
+              <small id="trendAverageDetail">Por intervalo exibido</small>
+            </div>
+            <div class="trend-insight">
+              <span class="trend-insight-label">Cada ponto representa</span>
+              <strong id="trendInterval">1 hora</strong>
+              <small id="trendIntervalDetail">No fuso do Google Analytics</small>
+            </div>
+          </div>
+
+          <div class="chart-explainer">
+            <span class="chart-explainer-icon">i</span>
+            <p id="trendExplanation"><strong>Como ler:</strong> azul mostra quantos usuários estiveram ativos em cada hora; azul-escuro mostra quantas páginas foram abertas. Uma pessoa pode abrir várias páginas, por isso as visualizações normalmente são maiores.</p>
+          </div>
+
+          <div class="chart-wrap">
+            <svg id="trendChart" viewBox="0 0 760 300" preserveAspectRatio="none" role="img" aria-label="Gráfico de evolução dos acessos"></svg>
+            <div class="chart-tooltip" id="chartTooltip" aria-hidden="true"></div>
+          </div>
         </article>
 
         <article class="panel realtime-panel">
