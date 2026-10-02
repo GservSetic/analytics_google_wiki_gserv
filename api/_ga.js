@@ -8,6 +8,9 @@ const DEFAULT_SERVICE_ACCOUNT_EMAIL = 'wiki-analytics-dashboard@project-d0079f33
 const DEFAULT_POOL_ID = 'vercel-wiki';
 const DEFAULT_PROVIDER_ID = 'vercel';
 
+let cachedAccessToken = null;
+let cachedAccessTokenExpiresAt = 0;
+
 function env(name) {
   return process.env[name]?.trim();
 }
@@ -73,6 +76,10 @@ async function getFederatedToken() {
 }
 
 async function accessToken() {
+  if (cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 60_000) {
+    return cachedAccessToken;
+  }
+
   const federatedToken = await getFederatedToken();
   const email = encodeURIComponent(serviceAccountEmail());
 
@@ -97,7 +104,10 @@ async function accessToken() {
 
   const data = await response.json();
   if (!data.accessToken) throw new Error('IAM Credentials não retornou accessToken.');
-  return data.accessToken;
+
+  cachedAccessToken = data.accessToken;
+  cachedAccessTokenExpiresAt = data.expireTime ? Date.parse(data.expireTime) : Date.now() + 50 * 60_000;
+  return cachedAccessToken;
 }
 
 async function gaRequest(method, body) {
@@ -128,6 +138,14 @@ export function runRealtimeReport(body) {
 
 export function runReport(body) {
   return gaRequest('runReport', body);
+}
+
+export async function batchRunReports(requests) {
+  if (!Array.isArray(requests) || requests.length === 0 || requests.length > 5) {
+    throw new Error('batchRunReports aceita de 1 a 5 relatórios por lote.');
+  }
+  const response = await gaRequest('batchRunReports', { requests });
+  return response.reports || [];
 }
 
 export function rows(report) {
