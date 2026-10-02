@@ -2,7 +2,7 @@ import { isConfigured, rows, runRealtimeReport, runReport } from './_ga.js';
 
 let realtimeCache = null;
 let realtimeCacheAt = 0;
-const REALTIME_CACHE_MS = 25_000;
+const REALTIME_CACHE_MS = 55_000;
 
 let pageUrlCache = new Map();
 let pageUrlCacheAt = 0;
@@ -78,6 +78,18 @@ function timelinePeak(timeline) {
   return timeline.reduce((best, item) => (item.views || 0) > (best?.views || -1) ? item : best, null);
 }
 
+function aggregateMetrics(report, collection = 'totals') {
+  const headers = report.metricHeaders?.map((item) => item.name) || [];
+  const row = report?.[collection]?.[0];
+  if (!row) return {};
+  const output = {};
+  headers.forEach((name, index) => {
+    const value = row.metricValues?.[index]?.value ?? '0';
+    output[name] = Number.isNaN(Number(value)) ? value : Number(value);
+  });
+  return output;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
 
@@ -90,13 +102,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [summaryReport, timelineReport, pagesReport] = await Promise.all([
-      runRealtimeReport({
-        metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }, { name: 'eventCount' }]
-      }),
+    const [timelineReport, pagesReport] = await Promise.all([
       runRealtimeReport({
         dimensions: [{ name: 'minutesAgo' }],
         metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }, { name: 'eventCount' }],
+        metricAggregations: ['TOTAL'],
         minuteRanges: [{ startMinutesAgo: 29, endMinutesAgo: 0 }],
         orderBys: [{ dimension: { dimensionName: 'minutesAgo' }, desc: true }]
       }),
@@ -108,7 +118,7 @@ export default async function handler(req, res) {
       })
     ]);
 
-    const summary = rows(summaryReport)[0] || {};
+    const summary = aggregateMetrics(timelineReport);
     const realtimePageRows = rows(pagesReport)
       .filter((item) => item.unifiedScreenName && item.unifiedScreenName !== '(not set)')
       .slice(0, 8);
@@ -144,7 +154,7 @@ export default async function handler(req, res) {
       mode: 'live',
       generatedAt: new Date().toISOString(),
       windowMinutes: 30,
-      refreshSeconds: 30,
+      refreshSeconds: 60,
       summary: {
         activeUsers: summary.activeUsers || 0,
         views: summary.screenPageViews || 0,
