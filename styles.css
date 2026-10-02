@@ -103,7 +103,18 @@ h1 { margin:0; font-size:30px; line-height:1.15; letter-spacing:-.035em; color:#
 
 .realtime-panel { padding-bottom:18px; }
 .live-badge { display:inline-flex; align-items:center; gap:7px; font-size:9px; font-weight:700; color:#138759; background:#eefaf4; border:1px solid #d7f1e3; border-radius:999px; padding:6px 9px; }
-.live-badge span { width:6px; height:6px; border-radius:50%; background:#1ab66f; box-shadow:0 0 0 4px rgba(26,182,111,.1); }
+.live-badge > span:first-child { width:6px; height:6px; flex:0 0 6px; border-radius:50%; background:#1ab66f; box-shadow:0 0 0 4px rgba(26,182,111,.1); }
+#activePagesCount {
+  width:auto;
+  height:auto;
+  display:inline;
+  flex:0 0 auto;
+  white-space:nowrap;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  line-height:1;
+}
 .live-badge.subtle { background:#f7fafc; border-color:#e5edf4; }
 .realtime-main { display:grid; grid-template-columns:130px 1fr; gap:15px; align-items:end; padding:14px 0 18px; border-bottom:1px solid #edf2f7; }
 .big-label { display:block; font-size:10px; color:#7e8c9e; }
@@ -1816,4 +1827,19 @@ body.embed-mode {
   .trend-view-bar {
     animation: none;
   }
+}
+
+
+/* ===== ACTIVE PAGES BADGE FIX ===== */
+.live-pages-panel .live-badge.subtle {
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+  padding-inline: 10px;
+}
+
+.live-pages-panel #activePagesCount {
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
 }
