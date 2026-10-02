@@ -140,14 +140,18 @@ export default async function handler(req, res) {
         avgEngagementSeconds: summary.averageEngagementTimePerSession || 0
       },
       trendGranularity: range === 'today' ? 'hour' : 'day',
-      trend: rows(trendReport).map((item) => ({
-        label: range === 'today' ? `${String(item.hour || '00').padStart(2, '0')}:00` : item.date,
-        date: item.date || null,
-        hour: item.hour ?? null,
-        activeUsers: item.activeUsers || 0,
-        sessions: item.sessions || 0,
-        views: item.screenPageViews || 0
-      })),
+      trend: rows(trendReport)
+        .map((item) => ({
+          label: range === 'today' ? `${String(item.hour || '00').padStart(2, '0')}:00` : item.date,
+          date: item.date || null,
+          hour: item.hour ?? null,
+          activeUsers: item.activeUsers || 0,
+          sessions: item.sessions || 0,
+          views: item.screenPageViews || 0
+        }))
+        .sort((a, b) => range === 'today'
+          ? Number(a.hour || 0) - Number(b.hour || 0)
+          : String(a.date || '').localeCompare(String(b.date || ''))),
       daily: range === 'today' ? [] : rows(trendReport).map((item) => ({
         date: item.date,
         activeUsers: item.activeUsers || 0,
