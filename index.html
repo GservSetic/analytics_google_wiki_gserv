@@ -109,9 +109,16 @@
               <h2 id="trendTitle">Movimento de acessos ao longo do dia</h2>
               <p class="chart-subtitle" id="trendSubtitle">Veja em quais horários a Wiki recebeu mais usuários e visualizações.</p>
             </div>
-            <div class="legend chart-legend">
-              <span><i class="dot blue"></i>Usuários ativos</span>
-              <span><i class="dot navy"></i>Visualizações de páginas</span>
+            <div class="trend-header-tools">
+              <div class="legend chart-legend">
+                <span><i class="dot blue"></i>Usuários</span>
+                <span><i class="trend-bar-swatch"></i>Visualizações</span>
+              </div>
+              <div class="trend-mode-switch" role="group" aria-label="Métrica exibida no gráfico">
+                <button type="button" class="trend-mode-btn active" data-trend-mode="both">Ambos</button>
+                <button type="button" class="trend-mode-btn" data-trend-mode="users">Usuários</button>
+                <button type="button" class="trend-mode-btn" data-trend-mode="views">Visualizações</button>
+              </div>
             </div>
           </div>
 
@@ -127,9 +134,9 @@
               <small id="trendAverageDetail">Por intervalo exibido</small>
             </div>
             <div class="trend-insight">
-              <span class="trend-insight-label">Cada ponto representa</span>
-              <strong id="trendInterval">1 hora</strong>
-              <small id="trendIntervalDetail">No fuso do Google Analytics</small>
+              <span class="trend-insight-label">Faixa mais movimentada</span>
+              <strong id="trendInterval">—</strong>
+              <small id="trendIntervalDetail">Maior concentração de acessos</small>
             </div>
           </div>
 
