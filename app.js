@@ -129,7 +129,7 @@ function renderReport(data) {
   animateNumber($('metricTime'), summary.avgEngagementSeconds || 0, (n) => `${n.toFixed(1).replace('.', ',')}s`);
 
   $('metricUsersCaption').textContent = state.range === 'today' ? 'Usuários ativos hoje' : `Usuários no período selecionado`;
-  renderTrend(data.daily || []);
+  renderTrend(data.trend || data.daily || [], data.trendGranularity || 'day');
   renderPages(data.pages || []);
   renderDevices(data.devices || []);
   renderCities(data.cities || []);
@@ -216,13 +216,43 @@ function renderCities(list) {
     </div>`).join('');
 }
 
-function renderTrend(list) {
-  const svg = $('trendChart');
-  if (!list.length) { svg.innerHTML = ''; return; }
+function trendLabel(row, granularity) {
+  if (granularity === 'hour') return row.label || `${String(row.hour || '00').padStart(2, '0')}:00`;
+  return formatDate(row.date || row.label);
+}
 
-  const width = 760, height = 300, pad = { left:45, right:18, top:20, bottom:34 };
+function renderTrend(list, granularity = 'day') {
+  const svg = $('trendChart');
+  const tooltip = $('chartTooltip');
+
+  if (!list.length) {
+    svg.innerHTML = '<text class="chart-empty" x="380" y="150" text-anchor="middle">Ainda não há dados suficientes para este período.</text>';
+    if (tooltip) tooltip.classList.remove('show');
+    return;
+  }
+
+  const isHourly = granularity === 'hour';
+  $('trendTitle').textContent = isHourly ? 'Movimento de acessos ao longo do dia' : 'Evolução dos acessos no período';
+  $('trendSubtitle').textContent = isHourly
+    ? 'Identifique rapidamente os horários de maior movimento na Wiki.'
+    : 'Compare como o uso da Wiki variou de um dia para o outro.';
+  $('trendInterval').textContent = isHourly ? '1 hora' : '1 dia';
+  $('trendIntervalDetail').textContent = isHourly ? 'Horário da propriedade no GA4' : 'Cada ponto é um dia do período';
+
+  const peak = list.reduce((best, row) => (row.views || 0) > (best.views || 0) ? row : best, list[0]);
+  const average = list.reduce((sum, row) => sum + (row.views || 0), 0) / Math.max(1, list.length);
+  $('trendPeak').textContent = trendLabel(peak, granularity);
+  $('trendPeakDetail').textContent = `${fmt.format(peak.views || 0)} visualizações · ${fmt.format(peak.activeUsers || 0)} usuários`;
+  $('trendAverage').textContent = fmt.format(Math.round(average));
+  $('trendAverageDetail').textContent = isHourly ? 'visualizações por hora' : 'visualizações por dia';
+  $('trendExplanation').innerHTML = isHourly
+    ? '<strong>Como ler:</strong> azul mostra os usuários ativos em cada hora; azul-escuro mostra quantas páginas foram abertas. Uma pessoa pode abrir várias páginas, por isso visualizações normalmente ficam acima de usuários.'
+    : '<strong>Como ler:</strong> cada ponto representa um dia. Azul mostra usuários ativos; azul-escuro mostra visualizações de páginas. Use esta curva para identificar dias de pico e quedas de acesso.';
+
+  const width = 760, height = 300, pad = { left:48, right:20, top:22, bottom:38 };
   const values = list.flatMap((d) => [d.activeUsers || 0, d.views || 0]);
-  const max = Math.max(1, ...values) * 1.12;
+  const maxRaw = Math.max(1, ...values);
+  const max = maxRaw * 1.12;
   const x = (i) => pad.left + (i * (width - pad.left - pad.right) / Math.max(1, list.length - 1));
   const y = (v) => height - pad.bottom - (v / max) * (height - pad.top - pad.bottom);
 
@@ -233,20 +263,66 @@ function renderTrend(list) {
   const gridLines = [0,.25,.5,.75,1].map((r) => {
     const py = pad.top + r * (height-pad.top-pad.bottom);
     const val = Math.round(max * (1-r));
-    return `<line class="chart-grid" x1="${pad.left}" y1="${py}" x2="${width-pad.right}" y2="${py}"/><text class="chart-label" x="${pad.left-9}" y="${py+3}" text-anchor="end">${compact(val)}</text>`;
+    return `<line class="chart-grid" x1="${pad.left}" y1="${py}" x2="${width-pad.right}" y2="${py}"/><text class="chart-label" x="${pad.left-10}" y="${py+3}" text-anchor="end">${compact(val)}</text>`;
   }).join('');
 
-  const labels = list.map((d,i) => `<text class="chart-label" x="${x(i)}" y="${height-10}" text-anchor="middle">${formatDate(d.date)}</text>`).join('');
-  const dots = list.map((d,i) => `<circle class="chart-point" cx="${x(i)}" cy="${y(d.activeUsers || 0)}" r="3.2"><title>${fmt.format(d.activeUsers || 0)} usuários</title></circle>`).join('');
+  const every = list.length > 20 ? 4 : list.length > 12 ? 3 : list.length > 8 ? 2 : 1;
+  const labels = list.map((d,i) => {
+    if (i % every !== 0 && i !== list.length - 1) return '';
+    return `<text class="chart-label chart-x-label" x="${x(i)}" y="${height-11}" text-anchor="middle">${escapeHtml(trendLabel(d, granularity))}</text>`;
+  }).join('');
+
+  const userDots = list.map((d,i) => `<circle class="chart-point chart-point-users" cx="${x(i)}" cy="${y(d.activeUsers || 0)}" r="3.2"/>`).join('');
+  const viewDots = list.map((d,i) => `<circle class="chart-point chart-point-views" cx="${x(i)}" cy="${y(d.views || 0)}" r="2.8"/>`).join('');
+  const hitWidth = Math.max(18, (width - pad.left - pad.right) / Math.max(1, list.length));
+  const hits = list.map((d,i) => `
+    <rect class="chart-hit" data-index="${i}" x="${x(i) - hitWidth/2}" y="${pad.top}" width="${hitWidth}" height="${height-pad.top-pad.bottom}" rx="4"/>
+  `).join('');
 
   svg.innerHTML = `
-    <defs><linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#3f9cff" stop-opacity=".18"/><stop offset="100%" stop-color="#3f9cff" stop-opacity="0"/></linearGradient></defs>
+    <defs>
+      <linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0%" stop-color="#3f9cff" stop-opacity=".20"/>
+        <stop offset="100%" stop-color="#3f9cff" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
     ${gridLines}
     <polygon class="chart-area" points="${area}"/>
     <polyline class="chart-line-views" points="${pointsViews}"/>
     <polyline class="chart-line-users" points="${pointsUsers}"/>
-    ${dots}
-    ${labels}`;
+    ${viewDots}
+    ${userDots}
+    ${labels}
+    ${hits}`;
+
+  svg.querySelectorAll('.chart-hit').forEach((hit) => {
+    hit.addEventListener('mouseenter', (event) => {
+      const index = Number(hit.dataset.index);
+      const row = list[index];
+      if (!row || !tooltip) return;
+      tooltip.innerHTML = `
+        <span class="tooltip-period">${escapeHtml(trendLabel(row, granularity))}</span>
+        <div><i class="tooltip-dot users"></i><span>Usuários ativos</span><strong>${fmt.format(row.activeUsers || 0)}</strong></div>
+        <div><i class="tooltip-dot views"></i><span>Visualizações</span><strong>${fmt.format(row.views || 0)}</strong></div>
+        <div><i class="tooltip-dot sessions"></i><span>Sessões</span><strong>${fmt.format(row.sessions || 0)}</strong></div>`;
+      tooltip.classList.add('show');
+      positionChartTooltip(event);
+    });
+    hit.addEventListener('mousemove', positionChartTooltip);
+    hit.addEventListener('mouseleave', () => tooltip?.classList.remove('show'));
+  });
+}
+
+function positionChartTooltip(event) {
+  const tooltip = $('chartTooltip');
+  const wrap = event.currentTarget.closest('.chart-wrap');
+  if (!tooltip || !wrap) return;
+  const rect = wrap.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const tooltipWidth = 190;
+  tooltip.style.left = `${Math.min(Math.max(10, x + 14), rect.width - tooltipWidth - 8)}px`;
+  tooltip.style.top = `${Math.max(8, y - 88)}px`;
 }
 
 function compact(value) {
