@@ -115,7 +115,7 @@ export default async function handler(req, res) {
         orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }]
       }),
       runReport({
-        dateRanges: [{ startDate: 'today', endDate: 'today' }],
+        dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
         dimensions: [{ name: 'pageTitle' }, { name: 'fullPageUrl' }],
         metrics: [{ name: 'screenPageViews' }],
         limit: '250',
