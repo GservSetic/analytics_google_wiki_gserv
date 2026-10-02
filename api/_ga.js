@@ -3,26 +3,41 @@ import { getVercelOidcToken } from '@vercel/oidc';
 const ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
 const CLOUD_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
 const DEFAULT_PROPERTY_ID = '554924878';
+const DEFAULT_PROJECT_NUMBER = '568010186513';
+const DEFAULT_SERVICE_ACCOUNT_EMAIL = 'wiki-analytics-dashboard@project-d0079f33-9005-473f-938.iam.gserviceaccount.com';
+const DEFAULT_POOL_ID = 'vercel-wiki';
+const DEFAULT_PROVIDER_ID = 'vercel';
 
 function env(name) {
   return process.env[name]?.trim();
 }
 
 export function isConfigured() {
-  return Boolean(
-    env('GCP_PROJECT_NUMBER') &&
-    env('GCP_SERVICE_ACCOUNT_EMAIL') &&
-    env('GCP_WORKLOAD_IDENTITY_POOL_ID') &&
-    env('GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID')
-  );
+  return true;
 }
 
 export function propertyId() {
   return env('GA_PROPERTY_ID') || DEFAULT_PROPERTY_ID;
 }
 
+function projectNumber() {
+  return env('GCP_PROJECT_NUMBER') || DEFAULT_PROJECT_NUMBER;
+}
+
+function serviceAccountEmail() {
+  return env('GCP_SERVICE_ACCOUNT_EMAIL') || DEFAULT_SERVICE_ACCOUNT_EMAIL;
+}
+
+function poolId() {
+  return env('GCP_WORKLOAD_IDENTITY_POOL_ID') || DEFAULT_POOL_ID;
+}
+
+function providerId() {
+  return env('GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID') || DEFAULT_PROVIDER_ID;
+}
+
 function providerResource() {
-  return `projects/${env('GCP_PROJECT_NUMBER')}/locations/global/workloadIdentityPools/${env('GCP_WORKLOAD_IDENTITY_POOL_ID')}/providers/${env('GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID')}`;
+  return `projects/${projectNumber()}/locations/global/workloadIdentityPools/${poolId()}/providers/${providerId()}`;
 }
 
 async function getFederatedToken() {
@@ -59,7 +74,7 @@ async function getFederatedToken() {
 
 async function accessToken() {
   const federatedToken = await getFederatedToken();
-  const email = encodeURIComponent(env('GCP_SERVICE_ACCOUNT_EMAIL'));
+  const email = encodeURIComponent(serviceAccountEmail());
 
   const response = await fetch(
     `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${email}:generateAccessToken`,
