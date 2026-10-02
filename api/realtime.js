@@ -88,7 +88,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [summaryReport, timelineReport, pagesReport, devicesReport, citiesReport, pageUrlReport] = await Promise.all([
+    const [summaryReport, timelineReport, pagesReport, devicesReport, citiesReport] = await Promise.all([
       runRealtimeReport({ metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }, { name: 'eventCount' }] }),
       runRealtimeReport({
         dimensions: [{ name: 'minutesAgo' }],
@@ -113,13 +113,6 @@ export default async function handler(req, res) {
         metrics: [{ name: 'activeUsers' }],
         limit: '8',
         orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }]
-      }),
-      runReport({
-        dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
-        dimensions: [{ name: 'pageTitle' }, { name: 'fullPageUrl' }],
-        metrics: [{ name: 'screenPageViews' }],
-        limit: '250',
-        orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }]
       })
     ]);
 
@@ -129,7 +122,32 @@ export default async function handler(req, res) {
       .sort((a, b) => b.minutesAgo - a.minutesAgo);
 
     const summary = summaryRows[0] || {};
-    const pageUrlMap = buildPageUrlMap(pageUrlReport);
+    const realtimePageRows = rows(pagesReport)
+      .filter((item) => item.unifiedScreenName && item.unifiedScreenName !== '(not set)')
+      .slice(0, 8);
+
+    const activeTitles = [...new Set(realtimePageRows.map((item) => item.unifiedScreenName))];
+
+    let pageUrlMap = new Map();
+    if (activeTitles.length) {
+      const pageUrlReport = await runReport({
+        dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
+        dimensions: [{ name: 'pageTitle' }, { name: 'fullPageUrl' }],
+        metrics: [{ name: 'screenPageViews' }],
+        dimensionFilter: {
+          filter: {
+            fieldName: 'pageTitle',
+            inListFilter: {
+              values: activeTitles,
+              caseSensitive: false
+            }
+          }
+        },
+        limit: '100',
+        orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }]
+      });
+      pageUrlMap = buildPageUrlMap(pageUrlReport);
+    }
 
     return res.status(200).json({
       mode: 'live',
@@ -141,7 +159,7 @@ export default async function handler(req, res) {
         events: summary.eventCount || 0
       },
       timeline: timelineRows,
-      pages: enrichRealtimePages(rows(pagesReport), pageUrlMap),
+      pages: enrichRealtimePages(realtimePageRows, pageUrlMap),
       devices: top(rows(devicesReport), 'deviceCategory'),
       cities: top(rows(citiesReport), 'city')
     });
