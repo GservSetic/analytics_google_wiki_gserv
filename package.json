@@ -4,13 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vercel dev",
-    "start": "npx serve ."
+    "dev": "npx vercel dev"
   },
   "dependencies": {
     "google-auth-library": "^10.3.0"
-  },
-  "devDependencies": {
-    "vercel": "^48.1.0"
   }
 }
