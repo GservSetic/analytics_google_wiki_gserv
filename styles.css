@@ -1521,3 +1521,96 @@ body.detail-open { overflow: hidden; }
   .page-detail-btn:hover { transform:none; }
   .page-detail-modal { animation:none; }
 }
+
+
+/* ===== WIKI EMBED MODE ===== */
+html.embed-mode-root,
+html.embed-mode-root body {
+  min-height: 100%;
+  background: transparent;
+}
+
+body.embed-mode {
+  background:
+    radial-gradient(circle at 88% 0%, rgba(54,145,245,.055), transparent 28%),
+    linear-gradient(180deg, #f8fbfe 0%, #f5f8fc 100%);
+}
+
+.embed-mode .app-shell {
+  display: block;
+  min-height: auto;
+}
+
+.embed-mode .sidebar {
+  display: none !important;
+}
+
+.embed-mode .content {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 14px 16px 20px;
+}
+
+.embed-mode .topbar {
+  min-height: auto;
+  margin-bottom: 12px;
+  padding: 0;
+  justify-content: flex-end;
+}
+
+.embed-mode .topbar > div:first-child {
+  display: none;
+}
+
+.embed-mode .topbar-actions {
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.embed-mode .smart-summary {
+  margin-top: 0;
+}
+
+.embed-mode .metric-grid,
+.embed-mode .dashboard-grid {
+  gap: 12px;
+}
+
+.embed-mode .metric-card {
+  min-height: 118px;
+}
+
+.embed-mode .panel {
+  padding: 16px;
+}
+
+.embed-mode .footer {
+  display: none;
+}
+
+.embed-mode .toast {
+  position: fixed;
+}
+
+@media (max-width: 760px) {
+  .embed-mode .content {
+    padding: 10px;
+  }
+
+  .embed-mode .topbar-actions {
+    align-items: stretch;
+  }
+
+  .embed-mode .range-switch {
+    flex: 1;
+  }
+
+  .embed-mode .range-btn {
+    flex: 1;
+  }
+
+  .embed-mode .sync-pill {
+    min-width: 0;
+  }
+}
