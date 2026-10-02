@@ -84,7 +84,8 @@ export default async function handler(req, res) {
 
   try {
     const dateRange = rangeFor(range);
-    const [summaryReport, dailyReport, pagesReport, devicesReport, citiesReport] = await Promise.all([
+    const trendDimension = range === 'today' ? 'hour' : 'date';
+    const [summaryReport, trendReport, pagesReport, devicesReport, citiesReport] = await Promise.all([
       runReport({
         dateRanges: [dateRange],
         metrics: [
@@ -97,9 +98,9 @@ export default async function handler(req, res) {
       }),
       runReport({
         dateRanges: [dateRange],
-        dimensions: [{ name: 'date' }],
+        dimensions: [{ name: trendDimension }],
         metrics: [{ name: 'activeUsers' }, { name: 'sessions' }, { name: 'screenPageViews' }],
-        orderBys: [{ dimension: { dimensionName: 'date' } }]
+        orderBys: [{ dimension: { dimensionName: trendDimension } }]
       }),
       runReport({
         dateRanges: [dateRange],
@@ -138,7 +139,16 @@ export default async function handler(req, res) {
         engagementRate: summary.engagementRate || 0,
         avgEngagementSeconds: summary.averageEngagementTimePerSession || 0
       },
-      daily: rows(dailyReport).map((item) => ({
+      trendGranularity: range === 'today' ? 'hour' : 'day',
+      trend: rows(trendReport).map((item) => ({
+        label: range === 'today' ? `${String(item.hour || '00').padStart(2, '0')}:00` : item.date,
+        date: item.date || null,
+        hour: item.hour ?? null,
+        activeUsers: item.activeUsers || 0,
+        sessions: item.sessions || 0,
+        views: item.screenPageViews || 0
+      })),
+      daily: range === 'today' ? [] : rows(trendReport).map((item) => ({
         date: item.date,
         activeUsers: item.activeUsers || 0,
         sessions: item.sessions || 0,
