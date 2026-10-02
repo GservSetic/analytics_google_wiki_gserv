@@ -3,6 +3,7 @@ const state = {
   report: null,
   realtime: null,
   timer: null,
+  reportTimer: null,
   lastRealtimeUsers: null,
   pageDetail: null,
   pageDetailRange: '7d',
@@ -832,6 +833,7 @@ async function boot() {
   await Promise.all([loadReport(), loadRealtime()]);
   document.body.classList.add('premium-data-ready');
   state.timer = setInterval(loadRealtime, 60_000);
+  state.reportTimer = setInterval(loadReport, 120_000);
 }
 
 boot();
