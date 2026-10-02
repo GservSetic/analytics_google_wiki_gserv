@@ -1,43 +1,12 @@
 import { isConfigured, rows, runRealtimeReport, runReport } from './_ga.js';
 
-const demo = {
-  mode: 'demo',
-  generatedAt: new Date().toISOString(),
-  windowMinutes: 30,
-  summary: { activeUsers: 7, views: 19, events: 46 },
-  timeline: [
-    { minutesAgo: 5, activeUsers: 2, views: 3 },
-    { minutesAgo: 4, activeUsers: 3, views: 5 },
-    { minutesAgo: 3, activeUsers: 3, views: 4 },
-    { minutesAgo: 2, activeUsers: 5, views: 7 },
-    { minutesAgo: 1, activeUsers: 6, views: 8 },
-    { minutesAgo: 0, activeUsers: 7, views: 9 }
-  ],
-  pages: [
-    { name: 'Carteira de Identidade Nacional (CIN)', url: 'https://wiki.setic.ro.gov.br/home/base_conhecimento/manuais/portal_cidadao/cin', activeUsers: 3, views: 7 },
-    { name: 'Dúvidas Frequentes — Portal do Cidadão', url: 'https://wiki.setic.ro.gov.br/home/base_conhecimento/manuais/portal_cidadao/duvidas_frequentes', activeUsers: 2, views: 5 },
-    { name: 'Wiki SETIC — Página inicial', url: 'https://wiki.setic.ro.gov.br/', activeUsers: 1, views: 3 },
-    { name: 'Autenticação de dois fatores do SEI', url: 'https://wiki.setic.ro.gov.br/home/base_conhecimento/manuais/sei/autenticacao_de_dois_fatores_do_sei', activeUsers: 1, views: 2 }
-  ],
-  devices: [
-    { name: 'desktop', activeUsers: 5 },
-    { name: 'mobile', activeUsers: 2 }
-  ],
-  cities: [
-    { name: 'Porto Velho', activeUsers: 3 },
-    { name: 'São Paulo', activeUsers: 2 },
-    { name: 'Brasília', activeUsers: 1 },
-    { name: 'Outras', activeUsers: 1 }
-  ]
-};
+let realtimeCache = null;
+let realtimeCacheAt = 0;
+const REALTIME_CACHE_MS = 25_000;
 
-function top(rowsList, dimension, limit = 8) {
-  return rowsList
-    .filter((item) => item[dimension] && item[dimension] !== '(not set)')
-    .slice(0, limit)
-    .map((item) => ({ name: item[dimension], activeUsers: item.activeUsers || 0, views: item.screenPageViews || 0 }));
-}
-
+let pageUrlCache = new Map();
+let pageUrlCacheAt = 0;
+const PAGE_URL_CACHE_MS = 5 * 60_000;
 
 function normalizeTitle(value = '') {
   return String(value).trim().toLocaleLowerCase('pt-BR');
@@ -65,12 +34,17 @@ function buildPageUrlMap(report) {
   return map;
 }
 
-function enrichRealtimePages(realtimeRows, urlMap) {
+function mergePageUrlCache(nextMap) {
+  for (const [key, value] of nextMap.entries()) pageUrlCache.set(key, value);
+  pageUrlCacheAt = Date.now();
+}
+
+function enrichRealtimePages(realtimeRows) {
   return realtimeRows
     .filter((item) => item.unifiedScreenName && item.unifiedScreenName !== '(not set)')
     .slice(0, 8)
     .map((item) => {
-      const match = urlMap.get(normalizeTitle(item.unifiedScreenName));
+      const match = pageUrlCache.get(normalizeTitle(item.unifiedScreenName));
       return {
         name: item.unifiedScreenName,
         url: match?.url || null,
@@ -80,20 +54,50 @@ function enrichRealtimePages(realtimeRows, urlMap) {
     });
 }
 
+function fillTimeline(report) {
+  const values = new Map(
+    rows(report).map((item) => [
+      Number(item.minutesAgo),
+      {
+        minutesAgo: Number(item.minutesAgo),
+        activeUsers: item.activeUsers || 0,
+        views: item.screenPageViews || 0,
+        events: item.eventCount || 0
+      }
+    ])
+  );
+
+  return Array.from({ length: 30 }, (_, index) => {
+    const minutesAgo = 29 - index;
+    return values.get(minutesAgo) || { minutesAgo, activeUsers: 0, views: 0, events: 0 };
+  });
+}
+
+function timelinePeak(timeline) {
+  if (!timeline.length) return null;
+  return timeline.reduce((best, item) => (item.views || 0) > (best?.views || -1) ? item : best, null);
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
 
+  if (realtimeCache && Date.now() - realtimeCacheAt < REALTIME_CACHE_MS) {
+    return res.status(200).json({ ...realtimeCache, cache: 'memory' });
+  }
+
   if (!isConfigured()) {
-    return res.status(200).json(demo);
+    return res.status(503).json({ error: 'Integração GA4 não configurada.' });
   }
 
   try {
-    const [summaryReport, timelineReport, pagesReport, devicesReport, citiesReport] = await Promise.all([
-      runRealtimeReport({ metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }, { name: 'eventCount' }] }),
+    const [summaryReport, timelineReport, pagesReport] = await Promise.all([
+      runRealtimeReport({
+        metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }, { name: 'eventCount' }]
+      }),
       runRealtimeReport({
         dimensions: [{ name: 'minutesAgo' }],
-        metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }],
-        minuteRanges: [{ startMinutesAgo: 5, endMinutesAgo: 0 }],
+        metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }, { name: 'eventCount' }],
+        minuteRanges: [{ startMinutesAgo: 29, endMinutesAgo: 0 }],
         orderBys: [{ dimension: { dimensionName: 'minutesAgo' }, desc: true }]
       }),
       runRealtimeReport({
@@ -101,35 +105,19 @@ export default async function handler(req, res) {
         metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }],
         limit: '8',
         orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }]
-      }),
-      runRealtimeReport({
-        dimensions: [{ name: 'deviceCategory' }],
-        metrics: [{ name: 'activeUsers' }],
-        limit: '5',
-        orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }]
-      }),
-      runRealtimeReport({
-        dimensions: [{ name: 'city' }],
-        metrics: [{ name: 'activeUsers' }],
-        limit: '8',
-        orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }]
       })
     ]);
 
-    const summaryRows = rows(summaryReport);
-    const timelineRows = rows(timelineReport)
-      .map((item) => ({ minutesAgo: Number(item.minutesAgo), activeUsers: item.activeUsers || 0, views: item.screenPageViews || 0 }))
-      .sort((a, b) => b.minutesAgo - a.minutesAgo);
-
-    const summary = summaryRows[0] || {};
+    const summary = rows(summaryReport)[0] || {};
     const realtimePageRows = rows(pagesReport)
       .filter((item) => item.unifiedScreenName && item.unifiedScreenName !== '(not set)')
       .slice(0, 8);
 
     const activeTitles = [...new Set(realtimePageRows.map((item) => item.unifiedScreenName))];
+    const missingTitles = activeTitles.filter((title) => !pageUrlCache.has(normalizeTitle(title)));
+    const cacheOld = Date.now() - pageUrlCacheAt > PAGE_URL_CACHE_MS;
 
-    let pageUrlMap = new Map();
-    if (activeTitles.length) {
+    if (activeTitles.length && (missingTitles.length || cacheOld)) {
       const pageUrlReport = await runReport({
         dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
         dimensions: [{ name: 'pageTitle' }, { name: 'fullPageUrl' }],
@@ -138,7 +126,7 @@ export default async function handler(req, res) {
           filter: {
             fieldName: 'pageTitle',
             inListFilter: {
-              values: activeTitles,
+              values: cacheOld ? activeTitles : missingTitles,
               caseSensitive: false
             }
           }
@@ -146,24 +134,48 @@ export default async function handler(req, res) {
         limit: '100',
         orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }]
       });
-      pageUrlMap = buildPageUrlMap(pageUrlReport);
+      mergePageUrlCache(buildPageUrlMap(pageUrlReport));
     }
 
-    return res.status(200).json({
+    const timeline = fillTimeline(timelineReport);
+    const peak = timelinePeak(timeline);
+
+    const payload = {
       mode: 'live',
       generatedAt: new Date().toISOString(),
       windowMinutes: 30,
+      refreshSeconds: 30,
       summary: {
         activeUsers: summary.activeUsers || 0,
         views: summary.screenPageViews || 0,
         events: summary.eventCount || 0
       },
-      timeline: timelineRows,
-      pages: enrichRealtimePages(realtimePageRows, pageUrlMap),
-      devices: top(rows(devicesReport), 'deviceCategory'),
-      cities: top(rows(citiesReport), 'city')
-    });
+      timeline,
+      peak: peak
+        ? {
+            minutesAgo: peak.minutesAgo,
+            label: peak.minutesAgo === 0 ? 'agora' : `-${peak.minutesAgo} min`,
+            activeUsers: peak.activeUsers,
+            views: peak.views,
+            events: peak.events
+          }
+        : null,
+      pages: enrichRealtimePages(realtimePageRows)
+    };
+
+    realtimeCache = payload;
+    realtimeCacheAt = Date.now();
+    return res.status(200).json(payload);
   } catch (error) {
+    if (realtimeCache) {
+      return res.status(200).json({
+        ...realtimeCache,
+        stale: true,
+        cache: 'stale',
+        warning: error.message
+      });
+    }
+
     return res.status(502).json({
       error: 'Não foi possível consultar o GA4 em tempo real.',
       detail: error.message
