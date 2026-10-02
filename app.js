@@ -6,6 +6,7 @@ const state = {
   lastRealtimeUsers: null,
   pageDetail: null,
   pageDetailRange: '7d',
+  trendMode: 'both',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -456,45 +457,72 @@ function renderTrend(list, granularity = 'day') {
   const tooltip = $('chartTooltip');
 
   if (!list.length) {
-    svg.innerHTML = '<text class="chart-empty" x="380" y="150" text-anchor="middle">Ainda não há dados suficientes para este período.</text>';
+    svg.innerHTML = '<text class="chart-empty" x="380" y="120" text-anchor="middle">Ainda não há dados suficientes para este período.</text>';
     if (tooltip) tooltip.classList.remove('show');
     return;
   }
 
   const isHourly = granularity === 'hour';
+  const mode = state.trendMode || 'both';
+
   $('trendTitle').textContent = isHourly ? 'Movimento de acessos ao longo do dia' : 'Evolução dos acessos no período';
   $('trendSubtitle').textContent = isHourly
-    ? 'Identifique rapidamente os horários de maior movimento na Wiki.'
-    : 'Compare como o uso da Wiki variou de um dia para o outro.';
-  $('trendInterval').textContent = isHourly ? '1 hora' : '1 dia';
-  $('trendIntervalDetail').textContent = isHourly ? 'Horário da propriedade no GA4' : 'Cada ponto é um dia do período';
+    ? 'Veja com clareza o volume de páginas abertas e quantos usuários estiveram ativos em cada hora.'
+    : 'Compare visualizações e usuários ao longo do período selecionado.';
 
   const peakIndex = list.reduce((best, row, index) => (row.views || 0) > (list[best]?.views || -1) ? index : best, 0);
   const peak = list[peakIndex];
   const average = list.reduce((sum, row) => sum + (row.views || 0), 0) / Math.max(1, list.length);
+
   $('trendPeak').textContent = trendLabel(peak, granularity);
   $('trendPeakDetail').textContent = `${fmt.format(peak.views || 0)} visualizações · ${fmt.format(peak.activeUsers || 0)} usuários`;
   $('trendAverage').textContent = fmt.format(Math.round(average));
   $('trendAverageDetail').textContent = isHourly ? 'visualizações por hora' : 'visualizações por dia';
+
+  let busyStart = 0;
+  let busyEnd = 0;
+  const windowSize = Math.min(3, list.length);
+  let bestWindow = -1;
+
+  for (let index = 0; index <= list.length - windowSize; index++) {
+    const total = list.slice(index, index + windowSize).reduce((sum, row) => sum + (row.views || 0), 0);
+    if (total > bestWindow) {
+      bestWindow = total;
+      busyStart = index;
+      busyEnd = index + windowSize - 1;
+    }
+  }
+
+  const busyStartLabel = trendLabel(list[busyStart], granularity);
+  const busyEndLabel = trendLabel(list[busyEnd], granularity);
+  $('trendInterval').textContent = busyStart === busyEnd ? busyStartLabel : `${busyStartLabel} — ${busyEndLabel}`;
+  $('trendIntervalDetail').textContent = isHourly
+    ? 'Maior concentração de acessos do dia'
+    : 'Trecho com maior volume de visualizações';
+
+  const lastIndex = list.length - 1;
+  const partialIndex = isHourly ? lastIndex : -1;
+  const partialLabel = partialIndex >= 0 ? trendLabel(list[partialIndex], granularity) : null;
+
   $('trendExplanation').innerHTML = isHourly
-    ? '<strong>Como ler:</strong> azul mostra os usuários ativos em cada hora; azul-escuro mostra quantas páginas foram abertas. A faixa destacada marca automaticamente o horário de maior movimento.'
-    : '<strong>Como ler:</strong> cada ponto representa um dia. Azul mostra usuários ativos; azul-escuro mostra visualizações. A faixa destacada marca o maior volume do período.';
+    ? `<strong>Como ler:</strong> as barras representam visualizações e a linha azul representa usuários ativos. O marcador destaca o pico. ${partialLabel ? `<span class="partial-note">${escapeHtml(partialLabel)} está em andamento e ainda pode aumentar.</span>` : ''}`
+    : '<strong>Como ler:</strong> as barras representam visualizações e a linha azul representa usuários ativos. O marcador destaca o maior volume do período.';
 
   const width = 760;
-  const height = 300;
-  const pad = { left: 48, right: 20, top: 28, bottom: 38 };
+  const height = 238;
+  const pad = { left: 48, right: 20, top: 30, bottom: 34 };
   const values = list.flatMap((item) => [item.activeUsers || 0, item.views || 0]);
   const maxRaw = Math.max(1, ...values);
   const max = maxRaw * 1.12;
-  const x = (i) => pad.left + i * (width - pad.left - pad.right) / Math.max(1, list.length - 1);
-  const y = (value) => height - pad.bottom - (value / max) * (height - pad.top - pad.bottom);
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const step = plotWidth / Math.max(1, list.length);
+  const x = (i) => pad.left + step * i + step / 2;
+  const y = (value) => height - pad.bottom - (value / max) * plotHeight;
 
   const pointsUsers = list.map((item, index) => `${x(index)},${y(item.activeUsers || 0)}`).join(' ');
-  const pointsViews = list.map((item, index) => `${x(index)},${y(item.views || 0)}`).join(' ');
-  const area = `${pad.left},${height - pad.bottom} ${pointsUsers} ${x(list.length - 1)},${height - pad.bottom}`;
-
   const gridLines = [0, .25, .5, .75, 1].map((ratio) => {
-    const py = pad.top + ratio * (height - pad.top - pad.bottom);
+    const py = pad.top + ratio * plotHeight;
     const value = Math.round(max * (1 - ratio));
     return `<line class="chart-grid" x1="${pad.left}" y1="${py}" x2="${width - pad.right}" y2="${py}"/><text class="chart-label" x="${pad.left - 10}" y="${py + 3}" text-anchor="end">${compact(value)}</text>`;
   }).join('');
@@ -502,35 +530,45 @@ function renderTrend(list, granularity = 'day') {
   const every = list.length > 20 ? 4 : list.length > 12 ? 3 : list.length > 8 ? 2 : 1;
   const labels = list.map((item, index) => {
     if (index % every !== 0 && index !== list.length - 1) return '';
-    return `<text class="chart-label chart-x-label" x="${x(index)}" y="${height - 11}" text-anchor="middle">${escapeHtml(trendLabel(item, granularity))}</text>`;
+    const partial = index === partialIndex;
+    return `<text class="chart-label chart-x-label ${partial ? 'partial' : ''}" x="${x(index)}" y="${height - 10}" text-anchor="middle">${escapeHtml(trendLabel(item, granularity))}${partial ? ' · agora' : ''}</text>`;
   }).join('');
 
-  const userDots = list.map((item, index) => `<circle class="chart-point chart-point-users" cx="${x(index)}" cy="${y(item.activeUsers || 0)}" r="3.2"/>`).join('');
-  const viewDots = list.map((item, index) => `<circle class="chart-point chart-point-views" cx="${x(index)}" cy="${y(item.views || 0)}" r="2.8"/>`).join('');
-  const hitWidth = Math.max(18, (width - pad.left - pad.right) / Math.max(1, list.length));
+  const barWidth = Math.min(30, Math.max(9, step * .56));
+  const bars = list.map((item, index) => {
+    const barY = y(item.views || 0);
+    const barHeight = Math.max(2, height - pad.bottom - barY);
+    const partial = index === partialIndex;
+    const peakBar = index === peakIndex;
+    return `<rect class="trend-view-bar ${peakBar ? 'peak' : ''} ${partial ? 'partial' : ''}" x="${x(index) - barWidth / 2}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="${Math.min(7, barWidth / 3)}"/>`;
+  }).join('');
+
+  const userDots = list.map((item, index) => {
+    const partial = index === partialIndex;
+    return `<circle class="chart-point chart-point-users ${partial ? 'partial' : ''}" cx="${x(index)}" cy="${y(item.activeUsers || 0)}" r="${index === peakIndex ? 4 : 3.1}"/>`;
+  }).join('');
+
+  const hitWidth = Math.max(18, step);
   const hits = list.map((item, index) => `
-    <rect class="chart-hit" data-index="${index}" x="${x(index) - hitWidth / 2}" y="${pad.top}" width="${hitWidth}" height="${height - pad.top - pad.bottom}" rx="4"/>
+    <rect class="chart-hit" data-index="${index}" x="${x(index) - hitWidth / 2}" y="${pad.top}" width="${hitWidth}" height="${plotHeight}" rx="4"/>
   `).join('');
 
-  const peakBandWidth = Math.min(54, Math.max(22, hitWidth * .86));
-  const peakBandX = Math.max(pad.left, Math.min(width - pad.right - peakBandWidth, x(peakIndex) - peakBandWidth / 2));
-  const peakLabelX = Math.max(75, Math.min(width - 90, x(peakIndex)));
+  const peakX = x(peakIndex);
+  const peakY = Math.min(y(peak.views || 0), y(peak.activeUsers || 0));
+  const peakTextX = Math.max(86, Math.min(width - 86, peakX));
+  const showBars = mode === 'both' || mode === 'views';
+  const showUsers = mode === 'both' || mode === 'users';
 
   svg.innerHTML = `
-    <defs>
-      <linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
-        <stop offset="0%" stop-color="#3f9cff" stop-opacity=".20"/>
-        <stop offset="100%" stop-color="#3f9cff" stop-opacity="0"/>
-      </linearGradient>
-    </defs>
     ${gridLines}
-    <rect class="chart-peak-band" x="${peakBandX}" y="${pad.top}" width="${peakBandWidth}" height="${height - pad.top - pad.bottom}" rx="8"/>
-    <text class="chart-peak-label" x="${peakLabelX}" y="17" text-anchor="middle">Pico · ${escapeHtml(trendLabel(peak, granularity))}</text>
-    <polygon class="chart-area" points="${area}"/>
-    <polyline class="chart-line-views" points="${pointsViews}"/>
-    <polyline class="chart-line-users" points="${pointsUsers}"/>
-    ${viewDots}
-    ${userDots}
+    ${showBars ? `<g class="trend-bars">${bars}</g>` : ''}
+    ${showUsers ? `<polyline class="chart-line-users trend-users-line" points="${pointsUsers}"/>${userDots}` : ''}
+    <line class="trend-peak-marker" x1="${peakX}" y1="${pad.top + 4}" x2="${peakX}" y2="${height - pad.bottom}"/>
+    <g class="trend-peak-badge" transform="translate(${peakTextX}, ${Math.max(8, peakY - 30)})">
+      <rect x="-49" y="-11" width="98" height="22" rx="11"/>
+      <text x="0" y="3" text-anchor="middle">Pico · ${escapeHtml(trendLabel(peak, granularity))}</text>
+    </g>
+    ${partialIndex >= 0 ? `<line class="trend-now-marker" x1="${x(partialIndex)}" y1="${pad.top}" x2="${x(partialIndex)}" y2="${height - pad.bottom}"/>` : ''}
     ${labels}
     ${hits}`;
 
@@ -539,8 +577,9 @@ function renderTrend(list, granularity = 'day') {
       const index = Number(hit.dataset.index);
       const row = list[index];
       if (!row || !tooltip) return;
+      const partial = index === partialIndex;
       tooltip.innerHTML = `
-        <span class="tooltip-period">${escapeHtml(trendLabel(row, granularity))}</span>
+        <span class="tooltip-period">${escapeHtml(trendLabel(row, granularity))}${partial ? ' · em andamento' : ''}</span>
         <div><i class="tooltip-dot users"></i><span>Usuários ativos</span><strong>${fmt.format(row.activeUsers || 0)}</strong></div>
         <div><i class="tooltip-dot views"></i><span>Visualizações</span><strong>${fmt.format(row.views || 0)}</strong></div>
         <div><i class="tooltip-dot sessions"></i><span>Sessões</span><strong>${fmt.format(row.sessions || 0)}</strong></div>`;
@@ -730,6 +769,17 @@ function showToast(message) {
 }
 
 function bindControls() {
+  document.querySelectorAll('.trend-mode-btn').forEach((button) => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('.trend-mode-btn').forEach((item) => item.classList.remove('active'));
+      button.classList.add('active');
+      state.trendMode = button.dataset.trendMode || 'both';
+      if (state.report) {
+        renderTrend(state.report.trend || state.report.daily || [], state.report.trendGranularity || 'day');
+      }
+    });
+  });
+
   document.querySelectorAll('.range-btn').forEach((button) => {
     button.addEventListener('click', () => {
       document.querySelectorAll('.range-btn').forEach((item) => item.classList.remove('active'));
