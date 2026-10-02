@@ -383,3 +383,54 @@ h1 { margin:0; font-size:30px; line-height:1.15; letter-spacing:-.035em; color:#
   .chart-legend { display:none; }
   .chart-wrap { height:260px; }
 }
+
+/* Links das páginas em atividade */
+.live-page-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.live-status-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #19ad6c;
+  box-shadow: 0 0 0 4px rgba(25,173,108,.08);
+}
+.live-page-link {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #38536e;
+  font-size: 10px;
+  text-decoration: none;
+  transition: color .18s ease;
+}
+.live-page-link > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-page-link:hover {
+  color: #1677ff;
+}
+.live-page-open {
+  flex: 0 0 auto;
+  color: #7ea9d8;
+  font-size: 10px;
+  opacity: .72;
+  transform: translateY(-1px);
+  transition: transform .18s ease, opacity .18s ease, color .18s ease;
+}
+.live-page-link:hover .live-page-open {
+  color: #1677ff;
+  opacity: 1;
+  transform: translate(2px, -3px);
+}
+.live-page-main .live-page-name::before {
+  content: none;
+}
