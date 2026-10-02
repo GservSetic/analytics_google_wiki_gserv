@@ -148,11 +148,22 @@ function renderRealtime(data) {
   }).join('');
 
   const pages = data.pages || [];
-  $('livePageList').innerHTML = pages.length ? pages.slice(0,5).map((item) => `
-    <div class="live-page-item">
-      <span class="live-page-name" title="${escapeHtml(item.name)}">${escapeHtml(shortLabel(item.name))}</span>
-      <strong class="live-page-value">${fmt.format(item.activeUsers || 0)}</strong>
-    </div>`).join('') : '<span class="muted">Nenhuma atividade recente.</span>';
+  $('livePageList').innerHTML = pages.length ? pages.slice(0,5).map((item) => {
+    const label = escapeHtml(shortLabel(item.name));
+    const title = escapeHtml(item.name);
+    const link = item.url
+      ? `<a class="live-page-link" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" title="Abrir ${title}"><span>${label}</span><span class="live-page-open" aria-hidden="true">↗</span></a>`
+      : `<span class="live-page-name" title="${title}">${label}</span>`;
+
+    return `
+      <div class="live-page-item">
+        <div class="live-page-main">
+          <span class="live-status-dot" aria-hidden="true"></span>
+          ${link}
+        </div>
+        <strong class="live-page-value">${fmt.format(item.activeUsers || 0)}</strong>
+      </div>`;
+  }).join('') : '<span class="muted">Nenhuma atividade recente.</span>';
 }
 
 function pageUrl(item) {
