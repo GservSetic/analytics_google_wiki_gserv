@@ -102,7 +102,7 @@
       </section>
 
       <section class="dashboard-grid">
-        <article class="panel chart-panel">
+        <article class="panel chart-panel wide-panel">
           <div class="panel-header chart-header">
             <div>
               <p class="panel-kicker">TENDÊNCIA DE ACESSO</p>
@@ -144,6 +144,16 @@
           </div>
         </article>
 
+        <article class="panel pages-panel">
+          <div class="panel-header compact"><div><p class="panel-kicker">CONTEÚDO</p><h2>Páginas mais acessadas</h2></div><span class="muted">por visualizações</span></div>
+          <div class="rank-list" id="pageList"></div>
+        </article>
+
+        <article class="panel live-pages-panel">
+          <div class="panel-header compact"><div><p class="panel-kicker live">AGORA</p><h2>Páginas em atividade</h2></div><span class="live-badge subtle"><span></span> ao vivo</span></div>
+          <div class="live-page-list" id="livePageList"></div>
+        </article>
+
         <article class="panel realtime-panel">
           <div class="panel-header compact">
             <div><p class="panel-kicker live">TEMPO REAL</p><h2>Atividade agora</h2></div>
@@ -167,37 +177,12 @@
           </div>
         </article>
 
-        <article class="panel heatmap-panel wide-panel">
-          <div class="panel-header">
-            <div>
-              <p class="panel-kicker">PADRÃO DE USO</p>
-              <h2>Mapa de calor por dia e horário</h2>
-              <p class="chart-subtitle">Média de visualizações nos últimos 30 dias. Quanto mais intensa a célula, maior o movimento.</p>
-            </div>
-            <span class="muted">Segunda → Domingo · 00h → 23h</span>
+        <article class="panel audience-panel">
+          <div class="panel-header compact"><div><p class="panel-kicker">AUDIÊNCIA</p><h2>Dispositivos</h2></div></div>
+          <div class="donut-layout">
+            <div class="donut" id="deviceDonut"><div class="donut-center"><strong id="deviceTotal">—</strong><span>usuários</span></div></div>
+            <div class="device-list" id="deviceList"></div>
           </div>
-          <div class="heatmap-legend"><span>Menor movimento</span><i></i><i></i><i></i><i></i><i></i><span>Maior movimento</span></div>
-          <div class="heatmap-scroll">
-            <div class="heatmap-grid" id="heatmapGrid" aria-label="Mapa de calor de acessos"></div>
-          </div>
-          <div class="heatmap-insight" id="heatmapInsight">Analisando os horários de maior movimento...</div>
-        </article>
-
-        <article class="panel sources-panel">
-          <div class="panel-header compact">
-            <div><p class="panel-kicker">AQUISIÇÃO</p><h2>Origem dos acessos</h2></div>
-            <span class="muted">sessões</span>
-          </div>
-          <div class="source-list" id="sourceList"></div>
-        </article>
-
-        <article class="panel events-panel">
-          <div class="panel-header compact">
-            <div><p class="panel-kicker">INTERAÇÕES</p><h2>Eventos importantes</h2></div>
-            <span class="muted">ações registradas</span>
-          </div>
-          <div class="event-list" id="eventList"></div>
-          <div class="event-note" id="eventInstrumentationNote" hidden></div>
         </article>
 
         <article class="panel engagement-panel wide-panel">
@@ -225,17 +210,13 @@
           </div>
         </article>
 
-        <article class="panel pages-panel">
-          <div class="panel-header compact"><div><p class="panel-kicker">CONTEÚDO</p><h2>Páginas mais acessadas</h2></div><span class="muted">por visualizações</span></div>
-          <div class="rank-list" id="pageList"></div>
-        </article>
-
-        <article class="panel audience-panel">
-          <div class="panel-header compact"><div><p class="panel-kicker">AUDIÊNCIA</p><h2>Dispositivos</h2></div></div>
-          <div class="donut-layout">
-            <div class="donut" id="deviceDonut"><div class="donut-center"><strong id="deviceTotal">—</strong><span>usuários</span></div></div>
-            <div class="device-list" id="deviceList"></div>
+        <article class="panel events-panel">
+          <div class="panel-header compact">
+            <div><p class="panel-kicker">INTERAÇÕES</p><h2>Eventos importantes</h2></div>
+            <span class="muted">ações registradas</span>
           </div>
+          <div class="event-list" id="eventList"></div>
+          <div class="event-note" id="eventInstrumentationNote" hidden></div>
         </article>
 
         <article class="panel cities-panel">
@@ -243,9 +224,28 @@
           <div class="city-list" id="cityList"></div>
         </article>
 
-        <article class="panel live-pages-panel">
-          <div class="panel-header compact"><div><p class="panel-kicker live">AGORA</p><h2>Páginas em atividade</h2></div><span class="live-badge subtle"><span></span> ao vivo</span></div>
-          <div class="live-page-list" id="livePageList"></div>
+        <article class="panel heatmap-panel wide-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">PADRÃO DE USO</p>
+              <h2>Mapa de calor por dia e horário</h2>
+              <p class="chart-subtitle">Média de visualizações nos últimos 30 dias. Quanto mais intensa a célula, maior o movimento.</p>
+            </div>
+            <span class="muted">Segunda → Domingo · 00h → 23h</span>
+          </div>
+          <div class="heatmap-legend"><span>Menor movimento</span><i></i><i></i><i></i><i></i><i></i><span>Maior movimento</span></div>
+          <div class="heatmap-scroll">
+            <div class="heatmap-grid" id="heatmapGrid" aria-label="Mapa de calor de acessos"></div>
+          </div>
+          <div class="heatmap-insight" id="heatmapInsight">Analisando os horários de maior movimento...</div>
+        </article>
+
+        <article class="panel sources-panel">
+          <div class="panel-header compact">
+            <div><p class="panel-kicker">AQUISIÇÃO</p><h2>Origem dos acessos</h2></div>
+            <span class="muted">sessões</span>
+          </div>
+          <div class="source-list" id="sourceList"></div>
         </article>
       </section>
 
