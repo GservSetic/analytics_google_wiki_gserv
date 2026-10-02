@@ -113,6 +113,8 @@ async function loadRealtime() {
 
     if (previous !== null && realtime.summary.activeUsers > previous) {
       showToast(`Novo acesso detectado · ${fmt.format(realtime.summary.activeUsers)} usuários ativos`);
+      premiumPulse('.realtime-panel');
+      premiumPulse('.live-pages-panel');
     }
   } catch (error) {
     $('syncLabel').textContent = 'Reconectando';
@@ -373,9 +375,53 @@ function bindControls() {
   });
 }
 
+
+function premiumPulse(selector) {
+  const element = document.querySelector(selector);
+  if (!element || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  element.classList.remove('premium-flash');
+  void element.offsetWidth;
+  element.classList.add('premium-flash');
+}
+
+function initPremiumVisuals() {
+  document.body.classList.add('premium-dashboard');
+
+  const revealItems = [...document.querySelectorAll('.metric-card, .panel')];
+  revealItems.forEach((item, index) => {
+    item.classList.add('premium-reveal');
+    item.style.setProperty('--reveal-delay', `${Math.min(index * 55, 440)}ms`);
+  });
+
+  if ('IntersectionObserver' in window && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('premium-visible');
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.08 });
+
+    revealItems.forEach((item) => observer.observe(item));
+  } else {
+    revealItems.forEach((item) => item.classList.add('premium-visible'));
+  }
+
+  document.querySelectorAll('.metric-card, .panel').forEach((card) => {
+    card.addEventListener('pointermove', (event) => {
+      if (event.pointerType === 'touch') return;
+      const rect = card.getBoundingClientRect();
+      card.style.setProperty('--pointer-x', `${event.clientX - rect.left}px`);
+      card.style.setProperty('--pointer-y', `${event.clientY - rect.top}px`);
+    });
+  });
+}
+
 async function boot() {
   bindControls();
+  initPremiumVisuals();
   await Promise.all([loadReport(), loadRealtime()]);
+  document.body.classList.add('premium-data-ready');
   state.timer = setInterval(loadRealtime, 15000);
 }
 
