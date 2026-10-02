@@ -191,3 +191,48 @@ h1 { margin:0; font-size:30px; line-height:1.15; letter-spacing:-.035em; color:#
   .realtime-main { grid-template-columns:105px 1fr; }
   .legend { display:none; }
 }
+
+.rank-title-link {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  max-width: 100%;
+  color: #294562;
+  text-decoration: none;
+  transition: color .18s ease;
+}
+.rank-title-link:hover {
+  color: #1677ff;
+}
+.rank-title-link > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rank-open-icon {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #7ea9d8;
+  opacity: .7;
+  transform: translateY(-1px);
+  transition: transform .18s ease, opacity .18s ease, color .18s ease;
+}
+.rank-title-link:hover .rank-open-icon {
+  color: #1677ff;
+  opacity: 1;
+  transform: translate(2px, -3px);
+}
+.pages-panel .rank-list {
+  max-height: 560px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.pages-panel .rank-list::-webkit-scrollbar {
+  width: 6px;
+}
+.pages-panel .rank-list::-webkit-scrollbar-thumb {
+  background: #d9e5f2;
+  border-radius: 999px;
+}
