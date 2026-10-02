@@ -311,6 +311,11 @@ function buildImportantEvents(report, pages) {
   };
 }
 
+function compactDateLabel(value) {
+  const raw = String(value || '');
+  return /^\d{8}$/.test(raw) ? `${raw.slice(6, 8)}/${raw.slice(4, 6)}` : raw;
+}
+
 function buildSmartSummary(range, summary, trend, pages, devices, anomaly) {
   const period = range === 'today' ? 'Hoje' : range === '7d' ? 'Nos últimos 7 dias' : 'Nos últimos 30 dias';
   const peak = trend.reduce((best, item) => (item.views || 0) > (best?.views || -1) ? item : best, null);
@@ -320,7 +325,7 @@ function buildSmartSummary(range, summary, trend, pages, devices, anomaly) {
     `${period}, a Wiki registra ${summary.activeUsers || 0} usuários ativos e ${summary.views || 0} visualizações.`
   ];
 
-  if (peak) pieces.push(`O maior movimento ocorreu em ${peak.label || peak.date || peak.hour}, com ${peak.views || 0} visualizações.`);
+  if (peak) pieces.push(`O maior movimento ocorreu em ${compactDateLabel(peak.label || peak.date || peak.hour)}, com ${peak.views || 0} visualizações.`);
   if (topPages.length) pieces.push(`${topPages.join(' e ')} concentram os maiores volumes de acesso.`);
   if (topDevice) {
     const deviceLabel = { mobile: 'celular', desktop: 'desktop', tablet: 'tablet' }[topDevice.name] || topDevice.name;
