@@ -103,9 +103,9 @@ export default async function handler(req, res) {
       }),
       runReport({
         dateRanges: [dateRange],
-        dimensions: [{ name: 'pagePath' }],
+        dimensions: [{ name: 'hostName' }, { name: 'pagePath' }],
         metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }],
-        limit: '8',
+        limit: '20',
         orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }]
       }),
       runReport({
@@ -144,7 +144,13 @@ export default async function handler(req, res) {
         sessions: item.sessions || 0,
         views: item.screenPageViews || 0
       })),
-      pages: mapRows(pagesReport, 'pagePath', [{ id: 'activeUsers', alias: 'activeUsers' }, { id: 'screenPageViews', alias: 'views' }]),
+      pages: rows(pagesReport).map((item) => ({
+        name: item.pagePath || '/',
+        url: `https://${item.hostName || 'wiki.setic.ro.gov.br'}${item.pagePath || '/'}`,
+        hostName: item.hostName || 'wiki.setic.ro.gov.br',
+        activeUsers: item.activeUsers || 0,
+        views: item.screenPageViews || 0
+      })),
       devices: mapRows(devicesReport, 'deviceCategory', [{ id: 'activeUsers', alias: 'activeUsers' }, { id: 'sessions', alias: 'sessions' }]),
       cities: mapRows(citiesReport, 'city', [{ id: 'activeUsers', alias: 'activeUsers' }])
     });
