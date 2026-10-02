@@ -46,13 +46,29 @@ function pageFilter(pages) {
 
 function labelPage(path = '/') {
   if (path === '/') return 'Página inicial';
+  const accents = {
+    cidadao: 'Cidadão',
+    duvidas: 'Dúvidas',
+    autenticacao: 'Autenticação',
+    politica: 'Política',
+    privacidade: 'Privacidade',
+    servicos: 'Serviços',
+    relatorios: 'Relatórios',
+    aquisicoes: 'Aquisições',
+    usuarios: 'Usuários'
+  };
+
   return String(path)
     .replace(/^\/pt-br/i, '')
     .replace(/^\/home\//i, '')
     .split('/')
     .filter(Boolean)
     .slice(-2)
-    .map((part) => part.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()))
+    .map((part) => part
+      .replaceAll('_', ' ')
+      .split(' ')
+      .map((word) => accents[word.toLocaleLowerCase('pt-BR')] || word.replace(/\b\w/g, (letter) => letter.toUpperCase()))
+      .join(' '))
     .join(' › ');
 }
 
@@ -146,30 +162,37 @@ function buildHeatmap(report) {
     { day: 0, label: 'Dom' }
   ];
   const grouped = new Map();
+  const datesByDay = new Map();
 
   for (const item of data) {
     const day = Number(item.dayOfWeek);
     const hour = Number(item.hour);
     const key = `${day}|${hour}`;
-    const current = grouped.get(key) || { views: 0, users: 0, samples: 0 };
+
+    if (!datesByDay.has(day)) datesByDay.set(day, new Set());
+    if (item.date) datesByDay.get(day).add(item.date);
+
+    const current = grouped.get(key) || { views: 0, users: 0 };
     current.views += item.screenPageViews || 0;
     current.users += item.activeUsers || 0;
-    current.samples += 1;
     grouped.set(key, current);
   }
 
-  const matrix = labels.map(({ day, label }) => ({
-    day,
-    label,
-    cells: Array.from({ length: 24 }, (_, hour) => {
-      const value = grouped.get(`${day}|${hour}`) || { views: 0, users: 0, samples: 0 };
-      return {
-        hour,
-        views: value.samples ? Math.round(value.views / value.samples) : 0,
-        activeUsers: value.samples ? Math.round(value.users / value.samples) : 0
-      };
-    })
-  }));
+  const matrix = labels.map(({ day, label }) => {
+    const daySamples = Math.max(1, datesByDay.get(day)?.size || 0);
+    return {
+      day,
+      label,
+      cells: Array.from({ length: 24 }, (_, hour) => {
+        const value = grouped.get(`${day}|${hour}`) || { views: 0, users: 0 };
+        return {
+          hour,
+          views: Math.round(value.views / daySamples),
+          activeUsers: Math.round(value.users / daySamples)
+        };
+      })
+    };
+  });
 
   const maxViews = Math.max(1, ...matrix.flatMap((row) => row.cells.map((cell) => cell.views)));
   return { period: '30d', maxViews, rows: matrix };
@@ -278,11 +301,12 @@ function buildImportantEvents(report, pages) {
   const measuredNames = new Set(eventRows.map((item) => item.eventName));
   const expected = ['click', 'file_download', 'view_search_results'];
   const missing = expected.filter((name) => !measuredNames.has(name));
+  const missingLabels = missing.map((name) => eventLabel(name).toLocaleLowerCase('pt-BR'));
 
   return {
     items: filtered.slice(0, 10),
     instrumentationNote: missing.length
-      ? 'Algumas interações avançadas ainda não aparecem no GA4. Cliques, downloads e buscas só serão exibidos quando esses eventos estiverem sendo coletados pela Wiki.'
+      ? `Ainda não há coleta registrada para: ${missingLabels.join(', ')}. Esses indicadores aparecerão automaticamente quando os respectivos eventos forem enviados ao GA4.`
       : null
   };
 }
