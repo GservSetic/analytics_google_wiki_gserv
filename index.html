@@ -61,6 +61,18 @@
         </div>
       </header>
 
+      <section class="smart-summary" id="smartSummaryCard" aria-label="Resumo inteligente">
+        <div class="smart-summary-icon" aria-hidden="true">✦</div>
+        <div class="smart-summary-content">
+          <div class="smart-summary-heading">
+            <span>RESUMO INTELIGENTE</span>
+            <span class="anomaly-badge normal" id="anomalyBadge">Monitoramento normal</span>
+          </div>
+          <p id="smartSummaryText">Analisando os dados mais recentes da Wiki...</p>
+          <small id="anomalyDetail">Comparando o movimento atual com o histórico de acessos.</small>
+        </div>
+      </section>
+
       <section class="metric-grid" aria-label="Indicadores principais">
         <article class="metric-card primary">
           <div class="metric-heading"><span>Usuários ativos</span><span class="metric-icon">↗</span></div>
@@ -143,11 +155,73 @@
               <strong class="realtime-value" id="realtimeUsers">—</strong>
               <span class="realtime-note">Atualização automática a cada 15s</span>
             </div>
-            <div class="mini-bars" id="miniBars" aria-label="Atividade dos últimos minutos"></div>
+            <div class="realtime-timeline">
+              <svg id="realtimeChart" viewBox="0 0 420 90" preserveAspectRatio="none" role="img" aria-label="Atividade minuto a minuto nos últimos 30 minutos"></svg>
+              <div class="realtime-axis"><span>-30 min</span><span>-15 min</span><span>agora</span></div>
+              <div class="realtime-peak" id="realtimePeak">Aguardando atividade recente...</div>
+            </div>
           </div>
           <div class="realtime-stats">
             <div><span>Visualizações</span><strong id="realtimeViews">—</strong></div>
             <div><span>Eventos</span><strong id="realtimeEvents">—</strong></div>
+          </div>
+        </article>
+
+        <article class="panel heatmap-panel wide-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">PADRÃO DE USO</p>
+              <h2>Mapa de calor por dia e horário</h2>
+              <p class="chart-subtitle">Média de visualizações nos últimos 30 dias. Quanto mais intensa a célula, maior o movimento.</p>
+            </div>
+            <span class="muted">Segunda → Domingo · 00h → 23h</span>
+          </div>
+          <div class="heatmap-legend"><span>Menor movimento</span><i></i><i></i><i></i><i></i><i></i><span>Maior movimento</span></div>
+          <div class="heatmap-scroll">
+            <div class="heatmap-grid" id="heatmapGrid" aria-label="Mapa de calor de acessos"></div>
+          </div>
+          <div class="heatmap-insight" id="heatmapInsight">Analisando os horários de maior movimento...</div>
+        </article>
+
+        <article class="panel sources-panel">
+          <div class="panel-header compact">
+            <div><p class="panel-kicker">AQUISIÇÃO</p><h2>Origem dos acessos</h2></div>
+            <span class="muted">sessões</span>
+          </div>
+          <div class="source-list" id="sourceList"></div>
+        </article>
+
+        <article class="panel events-panel">
+          <div class="panel-header compact">
+            <div><p class="panel-kicker">INTERAÇÕES</p><h2>Eventos importantes</h2></div>
+            <span class="muted">ações registradas</span>
+          </div>
+          <div class="event-list" id="eventList"></div>
+          <div class="event-note" id="eventInstrumentationNote" hidden></div>
+        </article>
+
+        <article class="panel engagement-panel wide-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">QUALIDADE DO CONTEÚDO</p>
+              <h2>Engajamento por página</h2>
+              <p class="chart-subtitle">Compare volume de acesso com o tempo efetivamente dedicado ao conteúdo.</p>
+            </div>
+            <span class="muted">clique na página para analisar</span>
+          </div>
+          <div class="engagement-table-wrap">
+            <table class="engagement-table">
+              <thead>
+                <tr>
+                  <th>Página</th>
+                  <th>Visualizações</th>
+                  <th>Usuários</th>
+                  <th>Tempo médio</th>
+                  <th>Engajamento</th>
+                </tr>
+              </thead>
+              <tbody id="engagementTable"></tbody>
+            </table>
           </div>
         </article>
 
@@ -180,6 +254,40 @@
         <span id="footerMode">Dados de demonstração</span>
       </footer>
     </main>
+  </div>
+
+  <div class="page-detail-backdrop" id="pageDetailBackdrop" hidden>
+    <section class="page-detail-modal" role="dialog" aria-modal="true" aria-labelledby="pageDetailTitle">
+      <header class="page-detail-header">
+        <div>
+          <p class="panel-kicker">ANÁLISE DA PÁGINA</p>
+          <h2 id="pageDetailTitle">Detalhes da página</h2>
+          <a id="pageDetailLink" class="page-detail-link" href="#" target="_blank" rel="noopener noreferrer">Abrir página ↗</a>
+        </div>
+        <button class="page-detail-close" id="pageDetailClose" type="button" aria-label="Fechar detalhes">×</button>
+      </header>
+
+      <div class="page-detail-controls" role="group" aria-label="Período da análise">
+        <button type="button" class="page-detail-range active" data-page-range="7d">7 dias</button>
+        <button type="button" class="page-detail-range" data-page-range="30d">30 dias</button>
+      </div>
+
+      <div class="page-detail-metrics">
+        <div><span>Visualizações</span><strong id="detailViews">—</strong></div>
+        <div><span>Usuários</span><strong id="detailUsers">—</strong></div>
+        <div><span>Tempo médio</span><strong id="detailTime">—</strong></div>
+        <div><span>Engajamento</span><strong id="detailEngagement">—</strong></div>
+      </div>
+
+      <div class="page-detail-peak" id="pageDetailPeak">Calculando o horário de pico...</div>
+
+      <div class="page-detail-chart">
+        <div class="page-detail-chart-head"><span>Evolução de visualizações</span><span id="pageDetailPeriodLabel">últimos 7 dias</span></div>
+        <svg id="pageDetailChart" viewBox="0 0 720 230" preserveAspectRatio="none" role="img" aria-label="Evolução da página selecionada"></svg>
+      </div>
+
+      <div class="page-detail-loading" id="pageDetailLoading" hidden>Consultando o Google Analytics...</div>
+    </section>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
