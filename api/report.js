@@ -92,7 +92,7 @@ export default async function handler(req, res) {
           { name: 'sessions' },
           { name: 'screenPageViews' },
           { name: 'engagementRate' },
-          { name: 'averageEngagementTimePerSession' }
+          { name: 'averageEngagementTimePerSession', expression: 'userEngagementDuration/sessions' }
         ]
       }),
       runReport({
