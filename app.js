@@ -155,13 +155,30 @@ function renderRealtime(data) {
     </div>`).join('') : '<span class="muted">Nenhuma atividade recente.</span>';
 }
 
+function pageUrl(item) {
+  if (item.url) return item.url;
+  const path = String(item.name || '');
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  if (path.startsWith('/')) return `https://wiki.setic.ro.gov.br${path}`;
+  return 'https://wiki.setic.ro.gov.br';
+}
+
 function renderPages(list) {
   const max = Math.max(1, ...list.map((item) => item.views || 0));
-  $('pageList').innerHTML = list.slice(0,6).map((item, index) => `
+  $('pageList').innerHTML = list.map((item, index) => `
     <div class="rank-item">
       <span class="rank-number">${index + 1}</span>
       <div class="rank-main">
-        <span class="rank-title" title="${escapeHtml(item.name)}">${escapeHtml(shortLabel(item.name))}</span>
+        <a
+          class="rank-title rank-title-link"
+          href="${escapeHtml(pageUrl(item))}"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Abrir ${escapeHtml(item.name)}"
+        >
+          <span>${escapeHtml(shortLabel(item.name))}</span>
+          <span class="rank-open-icon" aria-hidden="true">↗</span>
+        </a>
         <div class="rank-bar"><i style="width:${Math.max(4, (item.views / max) * 100)}%"></i></div>
       </div>
       <strong class="rank-value">${fmt.format(item.views || 0)}</strong>
