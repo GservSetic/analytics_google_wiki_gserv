@@ -185,6 +185,10 @@ function renderRealtime(data) {
     : 'Ainda não há atividade suficiente para destacar um pico.';
 
   const pages = data.pages || [];
+  const activePagesCount = Number(data.activePageCount ?? pages.length ?? 0);
+  const activePagesLabel = activePagesCount === 1 ? '1 página ativa' : `${fmt.format(activePagesCount)} páginas ativas`;
+  if ($('activePagesCount')) $('activePagesCount').textContent = activePagesLabel;
+
   $('livePageList').innerHTML = pages.length ? pages.slice(0, 5).map((item) => {
     const label = escapeHtml(shortLabel(item.name));
     const title = escapeHtml(item.name);
