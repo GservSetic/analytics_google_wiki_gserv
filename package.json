@@ -7,6 +7,6 @@
     "dev": "npx vercel dev"
   },
   "dependencies": {
-    "google-auth-library": "^10.3.0"
+    "@vercel/oidc": "^3.8.9"
   }
 }
