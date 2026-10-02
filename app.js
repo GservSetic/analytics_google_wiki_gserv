@@ -670,6 +670,16 @@ function renderPageDetailChart(list) {
     ${labels}`;
 }
 
+function initEmbedMode() {
+  const params = new URLSearchParams(window.location.search);
+  const embedded = params.get('embed') === '1';
+
+  if (!embedded) return;
+
+  document.body.classList.add('embed-mode');
+  document.documentElement.classList.add('embed-mode-root');
+}
+
 function premiumPulse(selector) {
   const element = document.querySelector(selector);
   if (!element || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -762,6 +772,7 @@ function bindControls() {
 }
 
 async function boot() {
+  initEmbedMode();
   bindControls();
   initPremiumVisuals();
   await Promise.all([loadReport(), loadRealtime()]);
