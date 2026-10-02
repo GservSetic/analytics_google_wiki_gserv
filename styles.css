@@ -1614,3 +1614,206 @@ body.embed-mode {
     min-width: 0;
   }
 }
+
+
+/* ===== TREND CHART V2 ===== */
+.chart-panel {
+  padding: 20px 22px 18px;
+}
+
+.chart-header {
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.trend-header-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.trend-bar-swatch {
+  width: 9px;
+  height: 9px;
+  display: inline-block;
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(20,63,107,.82), rgba(55,126,193,.48));
+}
+
+.trend-mode-switch {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #e2eaf3;
+  border-radius: 10px;
+  background: #f3f7fb;
+}
+
+.trend-mode-btn {
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: transparent;
+  color: #73859a;
+  cursor: pointer;
+  font-size: 7.5px;
+  font-weight: 800;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
+}
+
+.trend-mode-btn:hover {
+  color: #214f7a;
+}
+
+.trend-mode-btn.active {
+  background: #fff;
+  color: #174d7d;
+  box-shadow: 0 4px 10px rgba(31,70,108,.08);
+}
+
+.trend-insights {
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.trend-insight {
+  min-height: 72px;
+  padding: 11px 13px;
+}
+
+.chart-explainer {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+}
+
+.chart-explainer .partial-note {
+  color: #4f7295;
+  font-weight: 700;
+}
+
+.chart-wrap {
+  min-height: 238px;
+}
+
+#trendChart {
+  height: 238px;
+}
+
+.trend-view-bar {
+  fill: rgba(27,76,124,.15);
+  stroke: rgba(27,76,124,.08);
+  stroke-width: 1;
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: trendBarIn .48s cubic-bezier(.2,.8,.2,1) both;
+  transition: fill .18s ease, opacity .18s ease;
+}
+
+.trend-view-bar.peak {
+  fill: rgba(26,102,177,.34);
+  stroke: rgba(26,102,177,.18);
+}
+
+.trend-view-bar.partial {
+  fill: rgba(38,136,245,.10);
+  stroke: rgba(38,136,245,.22);
+  stroke-dasharray: 3 2;
+}
+
+.trend-users-line {
+  fill: none;
+  stroke: #2788fb;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 4px 8px rgba(39,136,251,.18));
+}
+
+.chart-point-users {
+  fill: #fff;
+  stroke: #2788fb;
+  stroke-width: 2;
+}
+
+.chart-point-users.partial {
+  fill: #edf6ff;
+  stroke-dasharray: 2 1;
+}
+
+.trend-peak-marker {
+  stroke: rgba(29,93,151,.30);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
+}
+
+.trend-peak-badge rect {
+  fill: rgba(255,255,255,.96);
+  stroke: rgba(39,118,190,.20);
+  stroke-width: 1;
+  filter: drop-shadow(0 5px 10px rgba(34,73,111,.12));
+}
+
+.trend-peak-badge text {
+  fill: #266dab;
+  font-size: 8px;
+  font-weight: 800;
+  font-family: Inter, sans-serif;
+}
+
+.trend-now-marker {
+  stroke: rgba(39,136,251,.22);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.chart-x-label.partial {
+  fill: #2b76bb;
+  font-weight: 800;
+}
+
+.chart-hit:hover ~ .trend-view-bar {
+  opacity: .85;
+}
+
+@keyframes trendBarIn {
+  from { transform: scaleY(.12); opacity: .25; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+
+@media (max-width: 760px) {
+  .trend-header-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .chart-legend {
+    order: 1;
+  }
+
+  .trend-mode-switch {
+    order: 2;
+    width: 100%;
+  }
+
+  .trend-mode-btn {
+    flex: 1;
+  }
+
+  .trend-insights {
+    grid-template-columns: 1fr;
+  }
+
+  #trendChart,
+  .chart-wrap {
+    height: 220px;
+    min-height: 220px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trend-view-bar {
+    animation: none;
+  }
+}
