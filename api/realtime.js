@@ -113,15 +113,16 @@ export default async function handler(req, res) {
       runRealtimeReport({
         dimensions: [{ name: 'unifiedScreenName' }],
         metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }],
-        limit: '8',
+        limit: '100',
         orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }]
       })
     ]);
 
     const summary = aggregateMetrics(timelineReport);
-    const realtimePageRows = rows(pagesReport)
-      .filter((item) => item.unifiedScreenName && item.unifiedScreenName !== '(not set)')
-      .slice(0, 8);
+    const allRealtimePageRows = rows(pagesReport)
+      .filter((item) => item.unifiedScreenName && item.unifiedScreenName !== '(not set)');
+    const activePageCount = allRealtimePageRows.length;
+    const realtimePageRows = allRealtimePageRows.slice(0, 8);
 
     const activeTitles = [...new Set(realtimePageRows.map((item) => item.unifiedScreenName))];
     const missingTitles = activeTitles.filter((title) => !pageUrlCache.has(normalizeTitle(title)));
@@ -170,6 +171,7 @@ export default async function handler(req, res) {
             events: peak.events
           }
         : null,
+      activePageCount,
       pages: enrichRealtimePages(realtimePageRows)
     };
 
