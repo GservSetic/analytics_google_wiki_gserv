@@ -766,7 +766,7 @@ async function boot() {
   initPremiumVisuals();
   await Promise.all([loadReport(), loadRealtime()]);
   document.body.classList.add('premium-data-ready');
-  state.timer = setInterval(loadRealtime, 30_000);
+  state.timer = setInterval(loadRealtime, 60_000);
 }
 
 boot();
