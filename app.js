@@ -191,22 +191,35 @@ function renderRealtime(data) {
   if ($('activePagesCount')) $('activePagesCount').textContent = activePagesLabel;
 
   $('livePageList').innerHTML = pages.length ? pages.map((item) => {
-    const label = escapeHtml(shortLabel(item.name));
+    const labelText = shortLabel(item.name);
+    const label = escapeHtml(labelText);
     const title = escapeHtml(item.name);
-    const link = item.url
-      ? `<a class="live-page-link" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" title="Abrir ${title}"><span>${label}</span><span class="live-page-open" aria-hidden="true">↗</span></a>`
+    const parts = item.url ? pagePartsFromUrl(item.url, labelText) : null;
+
+    const pageControl = parts
+      ? `<button
+          type="button"
+          class="live-page-link live-page-detail page-detail-btn"
+          data-page-path="${escapeHtml(parts.path)}"
+          data-page-host="${escapeHtml(parts.host)}"
+          data-page-label="${escapeHtml(parts.label)}"
+          title="Analisar ${title}"
+        ><span>${label}</span></button>
+        <a class="live-page-open live-page-open-target" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" title="Abrir página na Wiki" aria-label="Abrir ${title}">↗</a>`
       : `<span class="live-page-name" title="${title}">${label}</span>`;
 
     return `
       <div class="live-page-item">
         <div class="live-page-main">
           <span class="live-status-dot" aria-hidden="true"></span>
-          ${link}
+          <span class="live-page-title-wrap">${pageControl}</span>
         </div>
         <strong class="live-page-metric" title="Usuários ativos nos últimos 30 minutos">${fmt.format(item.activeUsers || 0)}</strong>
         <strong class="live-page-metric views" title="Visualizações nos últimos 30 minutos">${fmt.format(item.views || 0)}</strong>
       </div>`;
   }).join('') : '<span class="muted">Nenhuma atividade recente.</span>';
+
+  bindPageDetailButtons();
 }
 
 function renderRealtimeChart(list) {
@@ -258,6 +271,23 @@ function pageUrl(item) {
   return 'https://wiki.setic.ro.gov.br';
 }
 
+function pagePartsFromUrl(url, fallbackLabel = '') {
+  try {
+    const parsed = new URL(url);
+    return {
+      host: parsed.hostname,
+      path: parsed.pathname || '/',
+      label: fallbackLabel || shortLabel(parsed.pathname || '/')
+    };
+  } catch {
+    return {
+      host: 'wiki.setic.ro.gov.br',
+      path: '/',
+      label: fallbackLabel || 'Página'
+    };
+  }
+}
+
 function sparklineSvg(trend = []) {
   if (!trend.length) return '<span class="sparkline-empty">sem histórico</span>';
   const width = 92;
@@ -286,16 +316,17 @@ function renderPages(list) {
     <div class="rank-item page-rank-item">
       <span class="rank-number">${index + 1}</span>
       <div class="rank-main">
-        <a
-          class="rank-title rank-title-link"
-          href="${escapeHtml(pageUrl(item))}"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Abrir ${escapeHtml(item.name)}"
+        <button
+          type="button"
+          class="rank-title rank-title-link rank-title-detail page-detail-btn"
+          data-page-path="${escapeHtml(item.name)}"
+          data-page-host="${escapeHtml(item.hostName || 'wiki.setic.ro.gov.br')}"
+          data-page-label="${escapeHtml(item.label || shortLabel(item.name))}"
+          title="Analisar ${escapeHtml(item.label || shortLabel(item.name))}"
         >
           <span>${escapeHtml(item.label || shortLabel(item.name))}</span>
-          <span class="rank-open-icon" aria-hidden="true">↗</span>
-        </a>
+          <span class="rank-open-icon rank-detail-icon" aria-hidden="true">→</span>
+        </button>
         <div class="rank-bar"><i style="width:${Math.max(4, (item.views / max) * 100)}%"></i></div>
       </div>
       <div class="page-evolution">
@@ -303,14 +334,6 @@ function renderPages(list) {
         ${trendChip(item)}
       </div>
       <strong class="rank-value">${fmt.format(item.views || 0)}</strong>
-      <button
-        type="button"
-        class="page-detail-btn"
-        data-page-path="${escapeHtml(item.name)}"
-        data-page-host="${escapeHtml(item.hostName || 'wiki.setic.ro.gov.br')}"
-        data-page-label="${escapeHtml(item.label || shortLabel(item.name))}"
-        title="Analisar esta página"
-      >Detalhes</button>
     </div>`).join('');
 
   bindPageDetailButtons();
@@ -709,18 +732,24 @@ function openPageDetail(page) {
   $('pageDetailTitle').textContent = page.label;
   $('pageDetailLink').href = `https://${page.host}${page.path}`;
   $('pageDetailPeriodLabel').textContent = 'últimos 7 dias';
+  $('detailUsersPeriod').textContent = 'nos últimos 7 dias';
+
   document.querySelectorAll('.page-detail-range').forEach((button) => {
     button.classList.toggle('active', button.dataset.pageRange === '7d');
   });
 
   $('pageDetailBackdrop').hidden = false;
   document.body.classList.add('detail-open');
+  requestAnimationFrame(() => $('pageDetailBackdrop').classList.add('open'));
   loadPageDetail();
 }
 
 function closePageDetail() {
-  $('pageDetailBackdrop').hidden = true;
+  $('pageDetailBackdrop').classList.remove('open');
   document.body.classList.remove('detail-open');
+  setTimeout(() => {
+    $('pageDetailBackdrop').hidden = true;
+  }, 220);
 }
 
 async function loadPageDetail() {
@@ -745,17 +774,78 @@ async function loadPageDetail() {
 
 function renderPageDetail(data) {
   const summary = data.summary || {};
-  $('detailViews').textContent = fmt.format(summary.views || 0);
+  const is30 = data.range === '30d';
+
+  $('detailTodayViews').textContent = fmt.format(summary.todayViews || 0);
   $('detailUsers').textContent = fmt.format(summary.activeUsers || 0);
+  $('detailViewsPerUser').textContent = Number(summary.viewsPerUser || 0).toFixed(1).replace('.', ',');
   $('detailTime').textContent = formatSeconds(summary.avgEngagementSeconds || 0);
   $('detailEngagement').textContent = pct.format(summary.engagementRate || 0);
-  $('pageDetailPeriodLabel').textContent = data.range === '30d' ? 'últimos 30 dias' : 'últimos 7 dias';
+  $('detailUsersPeriod').textContent = is30 ? 'nos últimos 30 dias' : 'nos últimos 7 dias';
+  $('pageDetailPeriodLabel').textContent = is30 ? 'últimos 30 dias' : 'últimos 7 dias';
 
-  $('pageDetailPeak').innerHTML = data.peakHour
-    ? `<strong>Horário de pico:</strong> ${escapeHtml(data.peakHour.label)} · ${fmt.format(data.peakHour.views || 0)} visualizações · ${fmt.format(data.peakHour.activeUsers || 0)} usuários`
-    : 'Ainda não há dados suficientes para identificar um horário de pico.';
+  if (data.page?.url) $('pageDetailLink').href = data.page.url;
 
+  renderPageDetailPeaks(data.peakHours || (data.peakHour ? [data.peakHour] : []));
+  renderPageDetailSources(data.sources || []);
+  renderPageDetailDevices(data.devices || []);
   renderPageDetailChart(data.trend || []);
+}
+
+function renderPageDetailPeaks(list) {
+  const target = $('pageDetailPeaks');
+  if (!list.length) {
+    target.innerHTML = '<span class="muted">Ainda não há dados suficientes para identificar horários de pico.</span>';
+    return;
+  }
+
+  target.innerHTML = list.slice(0, 3).map((item, index) => `
+    <div class="page-detail-peak-card ${index === 0 ? 'primary' : ''}">
+      <span>${index === 0 ? 'Pico principal' : `${index + 1}º maior pico`}</span>
+      <strong>${escapeHtml(item.label || `${String(item.hour || 0).padStart(2, '0')}:00`)}</strong>
+      <small>${fmt.format(item.views || 0)} visualizações · ${fmt.format(item.activeUsers || 0)} usuários</small>
+    </div>`).join('');
+}
+
+function renderPageDetailSources(list) {
+  const target = $('pageDetailSources');
+  if (!list.length) {
+    target.innerHTML = '<span class="muted">Nenhuma origem identificada para esta página.</span>';
+    return;
+  }
+
+  const max = Math.max(1, ...list.map((item) => item.sessions || 0));
+  target.innerHTML = list.slice(0, 6).map((item) => `
+    <div class="page-detail-source-item">
+      <div class="page-detail-list-heading">
+        <span title="${escapeHtml(item.name || item.label)}">${escapeHtml(item.label || item.name)}</span>
+        <strong>${fmt.format(item.sessions || 0)}</strong>
+      </div>
+      <div class="page-detail-mini-bar"><i style="width:${Math.max(4, ((item.sessions || 0) / max) * 100)}%"></i></div>
+      <small>${fmt.format(item.activeUsers || 0)} usuários</small>
+    </div>`).join('');
+}
+
+function renderPageDetailDevices(list) {
+  const target = $('pageDetailDevices');
+  if (!list.length) {
+    target.innerHTML = '<span class="muted">Nenhum dispositivo identificado para esta página.</span>';
+    return;
+  }
+
+  const total = list.reduce((sum, item) => sum + (item.activeUsers || 0), 0) || 1;
+  target.innerHTML = list.map((item) => {
+    const share = (item.activeUsers || 0) / total * 100;
+    return `
+      <div class="page-detail-device-item">
+        <div class="page-detail-list-heading">
+          <span>${escapeHtml(item.label || item.name)}</span>
+          <strong>${share.toFixed(0)}%</strong>
+        </div>
+        <div class="page-detail-mini-bar device"><i style="width:${Math.max(4, share)}%"></i></div>
+        <small>${fmt.format(item.activeUsers || 0)} usuários · ${fmt.format(item.sessions || 0)} sessões</small>
+      </div>`;
+  }).join('');
 }
 
 function renderPageDetailChart(list) {
