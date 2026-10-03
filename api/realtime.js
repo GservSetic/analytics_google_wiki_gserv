@@ -110,7 +110,6 @@ function bestUrlMatch(title, report) {
 function enrichRealtimePages(realtimeRows) {
   return realtimeRows
     .filter((item) => item.unifiedScreenName && item.unifiedScreenName !== '(not set)')
-    .slice(0, 8)
     .map((item) => {
       const key = normalizeTitle(item.unifiedScreenName);
       const match = pageUrlCache.get(key);
