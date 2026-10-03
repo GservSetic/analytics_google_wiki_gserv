@@ -269,37 +269,74 @@
   </div>
 
   <div class="page-detail-backdrop" id="pageDetailBackdrop" hidden>
-    <section class="page-detail-modal" role="dialog" aria-modal="true" aria-labelledby="pageDetailTitle">
+    <aside class="page-detail-modal" role="dialog" aria-modal="true" aria-labelledby="pageDetailTitle">
       <header class="page-detail-header">
-        <div>
+        <div class="page-detail-heading">
           <p class="panel-kicker">ANÁLISE DA PÁGINA</p>
           <h2 id="pageDetailTitle">Detalhes da página</h2>
+          <p class="page-detail-subtitle">Desempenho, comportamento e aquisição desta página no Google Analytics.</p>
           <a id="pageDetailLink" class="page-detail-link" href="#" target="_blank" rel="noopener noreferrer">Abrir página ↗</a>
         </div>
         <button class="page-detail-close" id="pageDetailClose" type="button" aria-label="Fechar detalhes">×</button>
       </header>
 
-      <div class="page-detail-controls" role="group" aria-label="Período da análise">
-        <button type="button" class="page-detail-range active" data-page-range="7d">7 dias</button>
-        <button type="button" class="page-detail-range" data-page-range="30d">30 dias</button>
+      <div class="page-detail-toolbar">
+        <div>
+          <span class="page-detail-period-caption">Evolução</span>
+          <div class="page-detail-controls" role="group" aria-label="Período da análise">
+            <button type="button" class="page-detail-range active" data-page-range="7d">7 dias</button>
+            <button type="button" class="page-detail-range" data-page-range="30d">30 dias</button>
+          </div>
+        </div>
+        <span class="page-detail-status"><i></i> GA4 conectado</span>
       </div>
 
       <div class="page-detail-metrics">
-        <div><span>Visualizações</span><strong id="detailViews">—</strong></div>
-        <div><span>Usuários</span><strong id="detailUsers">—</strong></div>
-        <div><span>Tempo médio</span><strong id="detailTime">—</strong></div>
-        <div><span>Engajamento</span><strong id="detailEngagement">—</strong></div>
+        <div class="page-detail-metric featured"><span>Visualizações hoje</span><strong id="detailTodayViews">—</strong><small>até o momento</small></div>
+        <div><span>Usuários</span><strong id="detailUsers">—</strong><small id="detailUsersPeriod">no período</small></div>
+        <div><span>Visualizações / usuário</span><strong id="detailViewsPerUser">—</strong><small>média por usuário</small></div>
+        <div><span>Tempo médio</span><strong id="detailTime">—</strong><small>engajamento por usuário</small></div>
+        <div><span>Engajamento</span><strong id="detailEngagement">—</strong><small>taxa de sessões engajadas</small></div>
       </div>
 
-      <div class="page-detail-peak" id="pageDetailPeak">Calculando o horário de pico...</div>
+      <section class="page-detail-section page-detail-peak-section">
+        <div class="page-detail-section-head">
+          <div><span>HORÁRIOS DE PICO</span><strong>Quando esta página recebe mais acessos</strong></div>
+        </div>
+        <div class="page-detail-peaks" id="pageDetailPeaks">
+          <span class="muted">Calculando horários de pico...</span>
+        </div>
+      </section>
 
-      <div class="page-detail-chart">
-        <div class="page-detail-chart-head"><span>Evolução de visualizações</span><span id="pageDetailPeriodLabel">últimos 7 dias</span></div>
+      <section class="page-detail-chart">
+        <div class="page-detail-chart-head">
+          <div><span>EVOLUÇÃO</span><strong>Visualizações ao longo do tempo</strong></div>
+          <span id="pageDetailPeriodLabel">últimos 7 dias</span>
+        </div>
         <svg id="pageDetailChart" viewBox="0 0 720 230" preserveAspectRatio="none" role="img" aria-label="Evolução da página selecionada"></svg>
+      </section>
+
+      <div class="page-detail-grid">
+        <section class="page-detail-section">
+          <div class="page-detail-section-head">
+            <div><span>ORIGEM DOS ACESSOS</span><strong>Como os usuários chegaram</strong></div>
+          </div>
+          <div class="page-detail-source-list" id="pageDetailSources"></div>
+        </section>
+
+        <section class="page-detail-section">
+          <div class="page-detail-section-head">
+            <div><span>DISPOSITIVOS</span><strong>Onde a página foi acessada</strong></div>
+          </div>
+          <div class="page-detail-device-list" id="pageDetailDevices"></div>
+        </section>
       </div>
 
-      <div class="page-detail-loading" id="pageDetailLoading" hidden>Consultando o Google Analytics...</div>
-    </section>
+      <div class="page-detail-loading" id="pageDetailLoading" hidden>
+        <span class="page-detail-spinner"></span>
+        <strong>Consultando o Google Analytics...</strong>
+      </div>
+    </aside>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
