@@ -190,7 +190,7 @@ function renderRealtime(data) {
   const activePagesLabel = activePagesCount === 1 ? '1 página ativa' : `${fmt.format(activePagesCount)} páginas ativas`;
   if ($('activePagesCount')) $('activePagesCount').textContent = activePagesLabel;
 
-  $('livePageList').innerHTML = pages.length ? pages.slice(0, 5).map((item) => {
+  $('livePageList').innerHTML = pages.length ? pages.map((item) => {
     const label = escapeHtml(shortLabel(item.name));
     const title = escapeHtml(item.name);
     const link = item.url
@@ -203,7 +203,8 @@ function renderRealtime(data) {
           <span class="live-status-dot" aria-hidden="true"></span>
           ${link}
         </div>
-        <strong class="live-page-value">${fmt.format(item.activeUsers || 0)}</strong>
+        <strong class="live-page-metric" title="Usuários ativos nos últimos 30 minutos">${fmt.format(item.activeUsers || 0)}</strong>
+        <strong class="live-page-metric views" title="Visualizações nos últimos 30 minutos">${fmt.format(item.views || 0)}</strong>
       </div>`;
   }).join('') : '<span class="muted">Nenhuma atividade recente.</span>';
 }
