@@ -462,7 +462,7 @@ function renderTrend(list, granularity = 'day') {
   const tooltip = $('chartTooltip');
 
   if (!list.length) {
-    svg.innerHTML = '<text class="chart-empty" x="380" y="120" text-anchor="middle">Ainda não há dados suficientes para este período.</text>';
+    svg.innerHTML = '<text class="chart-empty" x="380" y="145" text-anchor="middle">Ainda não há dados suficientes para este período.</text>';
     if (tooltip) tooltip.classList.remove('show');
     return;
   }
@@ -505,8 +505,7 @@ function renderTrend(list, granularity = 'day') {
     ? 'Maior concentração de acessos do dia'
     : 'Trecho com maior volume de visualizações';
 
-  const lastIndex = list.length - 1;
-  const partialIndex = isHourly ? lastIndex : -1;
+  const partialIndex = isHourly ? list.length - 1 : -1;
   const partialLabel = partialIndex >= 0 ? trendLabel(list[partialIndex], granularity) : null;
 
   $('trendExplanation').innerHTML = isHourly
@@ -514,70 +513,150 @@ function renderTrend(list, granularity = 'day') {
     : '<strong>Como ler:</strong> as barras representam visualizações e a linha azul representa usuários ativos. O marcador destaca o maior volume do período.';
 
   const width = 760;
-  const height = 238;
-  const pad = { left: 48, right: 20, top: 30, bottom: 34 };
-  const values = list.flatMap((item) => [item.activeUsers || 0, item.views || 0]);
-  const maxRaw = Math.max(1, ...values);
-  const max = maxRaw * 1.12;
+  const height = 300;
+  const pad = { left: 56, right: 58, top: 58, bottom: 38 };
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
   const step = plotWidth / Math.max(1, list.length);
   const x = (i) => pad.left + step * i + step / 2;
-  const y = (value) => height - pad.bottom - (value / max) * plotHeight;
 
-  const pointsUsers = list.map((item, index) => `${x(index)},${y(item.activeUsers || 0)}`).join(' ');
-  const gridLines = [0, .25, .5, .75, 1].map((ratio) => {
-    const py = pad.top + ratio * plotHeight;
-    const value = Math.round(max * (1 - ratio));
-    return `<line class="chart-grid" x1="${pad.left}" y1="${py}" x2="${width - pad.right}" y2="${py}"/><text class="chart-label" x="${pad.left - 10}" y="${py + 3}" text-anchor="end">${compact(value)}</text>`;
-  }).join('');
+  const maxViewsRaw = Math.max(1, ...list.map((item) => Number(item.views || 0)));
+  const maxUsersRaw = Math.max(1, ...list.map((item) => Number(item.activeUsers || 0)));
+  const maxViews = maxViewsRaw * 1.12;
+  const maxUsers = maxUsersRaw * 1.18;
+  const yViews = (value) => height - pad.bottom - (Number(value || 0) / maxViews) * plotHeight;
+  const yUsers = (value) => height - pad.bottom - (Number(value || 0) / maxUsers) * plotHeight;
 
-  const every = list.length > 20 ? 4 : list.length > 12 ? 3 : list.length > 8 ? 2 : 1;
-  const labels = list.map((item, index) => {
-    if (index % every !== 0 && index !== list.length - 1) return '';
-    const partial = index === partialIndex;
-    return `<text class="chart-label chart-x-label ${partial ? 'partial' : ''}" x="${x(index)}" y="${height - 10}" text-anchor="middle">${escapeHtml(trendLabel(item, granularity))}${partial ? ' · agora' : ''}</text>`;
-  }).join('');
-
-  const barWidth = Math.min(30, Math.max(9, step * .56));
-  const bars = list.map((item, index) => {
-    const barY = y(item.views || 0);
-    const barHeight = Math.max(2, height - pad.bottom - barY);
-    const partial = index === partialIndex;
-    const peakBar = index === peakIndex;
-    return `<rect class="trend-view-bar ${peakBar ? 'peak' : ''} ${partial ? 'partial' : ''}" x="${x(index) - barWidth / 2}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="${Math.min(7, barWidth / 3)}"/>`;
-  }).join('');
-
-  const userDots = list.map((item, index) => {
-    const partial = index === partialIndex;
-    return `<circle class="chart-point chart-point-users ${partial ? 'partial' : ''}" cx="${x(index)}" cy="${y(item.activeUsers || 0)}" r="${index === peakIndex ? 4 : 3.1}"/>`;
-  }).join('');
-
-  const hitWidth = Math.max(18, step);
-  const hits = list.map((item, index) => `
-    <rect class="chart-hit" data-index="${index}" x="${x(index) - hitWidth / 2}" y="${pad.top}" width="${hitWidth}" height="${plotHeight}" rx="4"/>
-  `).join('');
-
-  const peakX = x(peakIndex);
-  const peakY = Math.min(y(peak.views || 0), y(peak.activeUsers || 0));
-  const peakTextX = Math.max(86, Math.min(width - 86, peakX));
   const showBars = mode === 'both' || mode === 'views';
   const showUsers = mode === 'both' || mode === 'users';
 
-  svg.innerHTML = `
-    ${gridLines}
-    ${showBars ? `<g class="trend-bars">${bars}</g>` : ''}
-    ${showUsers ? `<polyline class="chart-line-users trend-users-line" points="${pointsUsers}"/>${userDots}` : ''}
-    <line class="trend-peak-marker" x1="${peakX}" y1="${pad.top + 4}" x2="${peakX}" y2="${height - pad.bottom}"/>
-    <g class="trend-peak-badge" transform="translate(${peakTextX}, ${Math.max(8, peakY - 30)})">
-      <rect x="-49" y="-11" width="98" height="22" rx="11"/>
-      <text x="0" y="3" text-anchor="middle">Pico · ${escapeHtml(trendLabel(peak, granularity))}</text>
-    </g>
-    ${partialIndex >= 0 ? `<line class="trend-now-marker" x1="${x(partialIndex)}" y1="${pad.top}" x2="${x(partialIndex)}" y2="${height - pad.bottom}"/>` : ''}
-    ${labels}
-    ${hits}`;
+  const horizontalGrid = [0, .25, .5, .75, 1].map((ratio) => {
+    const py = pad.top + ratio * plotHeight;
+    const viewValue = Math.round(maxViews * (1 - ratio));
+    const userValue = Math.round(maxUsers * (1 - ratio));
+    return `
+      <line class="trend-grid-line" x1="${pad.left}" y1="${py}" x2="${width - pad.right}" y2="${py}"/>
+      ${showBars ? `<text class="trend-axis-label left" x="${pad.left - 10}" y="${py + 3}" text-anchor="end">${compact(viewValue)}</text>` : ''}
+      ${showUsers ? `<text class="trend-axis-label right" x="${width - pad.right + 10}" y="${py + 3}" text-anchor="start">${compact(userValue)}</text>` : ''}
+    `;
+  }).join('');
 
-  svg.querySelectorAll('.chart-hit').forEach((hit) => {
+  const labelEvery = list.length <= 16 ? 1 : list.length <= 24 ? 2 : list.length <= 32 ? 4 : 5;
+  const labels = list.map((item, index) => {
+    if (index % labelEvery !== 0 && index !== list.length - 1) return '';
+    const partial = index === partialIndex;
+    return `<text class="trend-x-label ${partial ? 'partial' : ''}" x="${x(index)}" y="${height - 12}" text-anchor="middle">${escapeHtml(trendLabel(item, granularity))}${partial ? ' · agora' : ''}</text>`;
+  }).join('');
+
+  const verticalGrid = list.map((item, index) => {
+    if (index % labelEvery !== 0 && index !== list.length - 1) return '';
+    return `<line class="trend-grid-vertical" x1="${x(index)}" y1="${pad.top}" x2="${x(index)}" y2="${height - pad.bottom}"/>`;
+  }).join('');
+
+  const barWidth = Math.min(32, Math.max(10, step * .56));
+  const bars = list.map((item, index) => {
+    const barY = yViews(item.views || 0);
+    const barHeight = Math.max(2, height - pad.bottom - barY);
+    const partial = index === partialIndex;
+    const peakBar = index === peakIndex;
+    const fill = partial
+      ? 'url(#trendPartialPattern)'
+      : peakBar
+        ? 'url(#trendPeakBarGradient)'
+        : 'url(#trendBarGradient)';
+    return `<rect class="trend-view-bar ${peakBar ? 'peak' : ''} ${partial ? 'partial' : ''}" x="${x(index) - barWidth / 2}" y="${barY}" width="${barWidth}" height="${barHeight}" rx="${Math.min(6, barWidth / 3)}" fill="${fill}"/>`;
+  }).join('');
+
+  const completeUserEnd = partialIndex > 0 ? partialIndex - 1 : list.length - 1;
+  const solidUserPoints = list.slice(0, completeUserEnd + 1)
+    .map((item, index) => `${x(index)},${yUsers(item.activeUsers || 0)}`).join(' ');
+  const fullUserPoints = list.map((item, index) => `${x(index)},${yUsers(item.activeUsers || 0)}`).join(' ');
+  const areaPoints = `${x(0)},${height - pad.bottom} ${fullUserPoints} ${x(list.length - 1)},${height - pad.bottom}`;
+
+  const partialSegment = partialIndex > 0
+    ? `<line class="trend-users-partial-segment" x1="${x(partialIndex - 1)}" y1="${yUsers(list[partialIndex - 1]?.activeUsers || 0)}" x2="${x(partialIndex)}" y2="${yUsers(list[partialIndex]?.activeUsers || 0)}"/>`
+    : '';
+
+  const userDots = list.map((item, index) => {
+    const partial = index === partialIndex;
+    const peakPoint = index === peakIndex;
+    return `<circle class="trend-user-point ${partial ? 'partial' : ''} ${peakPoint ? 'peak' : ''}" cx="${x(index)}" cy="${yUsers(item.activeUsers || 0)}" r="${peakPoint ? 4.8 : 3.4}"/>`;
+  }).join('');
+
+  const peakX = x(peakIndex);
+  const peakTopY = Math.min(yViews(peak.views || 0), yUsers(peak.activeUsers || 0));
+  const calloutWidth = 118;
+  const calloutHeight = 47;
+  const calloutX = Math.max(pad.left + calloutWidth / 2, Math.min(width - pad.right - calloutWidth / 2, peakX));
+  const calloutY = Math.max(8, peakTopY - 57);
+
+  const hitWidth = Math.max(18, step);
+  const hits = list.map((item, index) => `
+    <rect class="trend-hit" data-index="${index}" x="${x(index) - hitWidth / 2}" y="${pad.top}" width="${hitWidth}" height="${plotHeight}" rx="4"/>
+  `).join('');
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="trendBarGradient" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0%" stop-color="#7bbcff" stop-opacity=".72"/>
+        <stop offset="100%" stop-color="#cfe5fb" stop-opacity=".48"/>
+      </linearGradient>
+      <linearGradient id="trendPeakBarGradient" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0%" stop-color="#5aa8f5" stop-opacity=".82"/>
+        <stop offset="100%" stop-color="#9bcaf4" stop-opacity=".62"/>
+      </linearGradient>
+      <linearGradient id="trendUsersAreaGradient" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0%" stop-color="#2788fb" stop-opacity=".16"/>
+        <stop offset="100%" stop-color="#2788fb" stop-opacity="0"/>
+      </linearGradient>
+      <pattern id="trendPartialPattern" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <rect width="6" height="6" fill="rgba(169,207,245,.26)"/>
+        <rect width="2" height="6" fill="rgba(39,136,251,.28)"/>
+      </pattern>
+    </defs>
+
+    <rect class="trend-plot-bg" x="${pad.left}" y="${pad.top}" width="${plotWidth}" height="${plotHeight}" rx="10"/>
+
+    <g class="trend-grid">${horizontalGrid}${verticalGrid}</g>
+
+    ${showBars ? `<g class="trend-bars">${bars}</g>` : ''}
+
+    ${showUsers ? `
+      <polygon class="trend-users-area" points="${areaPoints}"/>
+      <polyline class="trend-users-line" points="${solidUserPoints}"/>
+      ${partialSegment}
+      ${userDots}
+    ` : ''}
+
+    <text class="trend-axis-title left" x="${pad.left}" y="${pad.top - 17}">Visualizações</text>
+    <text class="trend-axis-title right" x="${width - pad.right}" y="${pad.top - 17}" text-anchor="end">Usuários ativos</text>
+
+    <g class="trend-inline-legend" transform="translate(${pad.left}, 20)">
+      <rect class="trend-legend-bar" x="0" y="0" width="13" height="9" rx="2"/>
+      <text x="19" y="8">Visualizações (barras)</text>
+      <line class="trend-legend-line" x1="132" y1="5" x2="151" y2="5"/>
+      <circle class="trend-legend-dot" cx="141.5" cy="5" r="3"/>
+      <text x="158" y="8">Usuários ativos (linha)</text>
+    </g>
+
+    <line class="trend-peak-marker" x1="${peakX}" y1="${pad.top}" x2="${peakX}" y2="${height - pad.bottom}"/>
+
+    <g class="trend-peak-callout" transform="translate(${calloutX - calloutWidth / 2}, ${calloutY})">
+      <rect class="trend-callout-box" width="${calloutWidth}" height="${calloutHeight}" rx="10"/>
+      <rect class="trend-callout-head" width="${calloutWidth}" height="20" rx="10"/>
+      <rect class="trend-callout-head-mask" y="10" width="${calloutWidth}" height="10"/>
+      <text class="trend-callout-title" x="${calloutWidth / 2}" y="14" text-anchor="middle">Pico · ${escapeHtml(trendLabel(peak, granularity))}</text>
+      <text class="trend-callout-detail" x="${calloutWidth / 2}" y="31" text-anchor="middle">${fmt.format(peak.views || 0)} visualizações</text>
+      <text class="trend-callout-detail" x="${calloutWidth / 2}" y="42" text-anchor="middle">${fmt.format(peak.activeUsers || 0)} usuários</text>
+    </g>
+
+    ${partialIndex >= 0 ? `<line class="trend-now-marker" x1="${x(partialIndex)}" y1="${pad.top}" x2="${x(partialIndex)}" y2="${height - pad.bottom}"/>` : ''}
+
+    ${labels}
+    ${hits}
+  `;
+
+  svg.querySelectorAll('.trend-hit').forEach((hit) => {
     hit.addEventListener('mouseenter', (event) => {
       const index = Number(hit.dataset.index);
       const row = list[index];
