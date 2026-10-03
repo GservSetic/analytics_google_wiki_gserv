@@ -196,7 +196,6 @@ export default async function handler(req, res) {
     const summary = rows(summaryReport)[0] || {};
     const allRealtimePageRows = rows(pagesReport)
       .filter((item) => item.unifiedScreenName && item.unifiedScreenName !== '(not set)');
-    const activePageCount = allRealtimePageRows.length;
     const realtimePageRows = allRealtimePageRows.slice(0, 50);
 
     const activeTitles = [...new Set(realtimePageRows.map((item) => item.unifiedScreenName))];
@@ -262,6 +261,9 @@ export default async function handler(req, res) {
 
     const timeline = fillTimeline(timelineReport);
     const peak = timelinePeak(timeline);
+    const resolvedPages = enrichRealtimePages(realtimePageRows)
+      .filter((item) => Boolean(item.url));
+    const activePageCount = resolvedPages.length;
 
     const payload = {
       mode: 'live',
@@ -284,7 +286,7 @@ export default async function handler(req, res) {
           }
         : null,
       activePageCount,
-      pages: enrichRealtimePages(realtimePageRows)
+      pages: resolvedPages
     };
 
     realtimeCache = payload;
