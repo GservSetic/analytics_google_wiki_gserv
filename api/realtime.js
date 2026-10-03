@@ -7,9 +7,48 @@ const REALTIME_CACHE_MS = 55_000;
 let pageUrlCache = new Map();
 let pageUrlCacheAt = 0;
 const PAGE_URL_CACHE_MS = 5 * 60_000;
+const PAGE_URL_RETRY_MS = 10 * 60_000;
+const unresolvedTitleCache = new Map();
 
 function normalizeTitle(value = '') {
-  return String(value).trim().toLocaleLowerCase('pt-BR');
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\|\s*wiki\.?setic\s*$/i, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function titleTokens(value = '') {
+  return new Set(
+    normalizeTitle(value)
+      .split(' ')
+      .filter((token) => token.length > 2)
+  );
+}
+
+function titleSimilarity(left = '', right = '') {
+  const a = normalizeTitle(left);
+  const b = normalizeTitle(right);
+
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if ((a.includes(b) || b.includes(a)) && Math.min(a.length, b.length) >= 18) return 0.94;
+
+  const aTokens = titleTokens(a);
+  const bTokens = titleTokens(b);
+  if (!aTokens.size || !bTokens.size) return 0;
+
+  let shared = 0;
+  for (const token of aTokens) {
+    if (bTokens.has(token)) shared += 1;
+  }
+
+  const coverage = shared / Math.max(aTokens.size, bTokens.size);
+  const precision = shared / Math.min(aTokens.size, bTokens.size);
+  return coverage * 0.72 + precision * 0.28;
 }
 
 function buildPageUrlMap(report) {
@@ -35,8 +74,26 @@ function buildPageUrlMap(report) {
 }
 
 function mergePageUrlCache(nextMap) {
-  for (const [key, value] of nextMap.entries()) pageUrlCache.set(key, value);
+  for (const [key, value] of nextMap.entries()) {
+    pageUrlCache.set(key, value);
+    unresolvedTitleCache.delete(key);
+  }
   pageUrlCacheAt = Date.now();
+}
+
+function bestUrlMatch(title, report) {
+  const candidates = rows(report)
+    .filter((item) => item.pageTitle && item.fullPageUrl)
+    .map((item) => ({
+      title: item.pageTitle,
+      url: /^https?:\/\//i.test(item.fullPageUrl) ? item.fullPageUrl : `https://${item.fullPageUrl}`,
+      views: item.screenPageViews || 0,
+      score: titleSimilarity(title, item.pageTitle)
+    }))
+    .filter((item) => item.score >= 0.78)
+    .sort((a, b) => b.score - a.score || b.views - a.views);
+
+  return candidates[0] || null;
 }
 
 function enrichRealtimePages(realtimeRows) {
@@ -125,27 +182,64 @@ export default async function handler(req, res) {
     const realtimePageRows = allRealtimePageRows.slice(0, 8);
 
     const activeTitles = [...new Set(realtimePageRows.map((item) => item.unifiedScreenName))];
-    const missingTitles = activeTitles.filter((title) => !pageUrlCache.has(normalizeTitle(title)));
     const cacheOld = Date.now() - pageUrlCacheAt > PAGE_URL_CACHE_MS;
+    const now = Date.now();
 
-    if (activeTitles.length && (missingTitles.length || cacheOld)) {
-      const pageUrlReport = await runReport({
-        dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
-        dimensions: [{ name: 'pageTitle' }, { name: 'fullPageUrl' }],
-        metrics: [{ name: 'screenPageViews' }],
-        dimensionFilter: {
-          filter: {
-            fieldName: 'pageTitle',
-            inListFilter: {
-              values: cacheOld ? activeTitles : missingTitles,
-              caseSensitive: false
+    const retryableTitles = activeTitles.filter((title) => {
+      const key = normalizeTitle(title);
+      if (pageUrlCache.has(key)) return false;
+      const lastFailure = unresolvedTitleCache.get(key) || 0;
+      return now - lastFailure > PAGE_URL_RETRY_MS;
+    });
+
+    if (activeTitles.length && (retryableTitles.length || cacheOld)) {
+      const exactTitles = cacheOld ? activeTitles : retryableTitles;
+
+      if (exactTitles.length) {
+        const pageUrlReport = await runReport({
+          dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
+          dimensions: [{ name: 'pageTitle' }, { name: 'fullPageUrl' }],
+          metrics: [{ name: 'screenPageViews' }],
+          dimensionFilter: {
+            filter: {
+              fieldName: 'pageTitle',
+              inListFilter: {
+                values: exactTitles,
+                caseSensitive: false
+              }
             }
+          },
+          limit: '250',
+          orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }]
+        });
+        mergePageUrlCache(buildPageUrlMap(pageUrlReport));
+      }
+
+      const unresolved = retryableTitles.filter((title) => !pageUrlCache.has(normalizeTitle(title)));
+
+      if (unresolved.length) {
+        const fallbackReport = await runReport({
+          dateRanges: [{ startDate: '90daysAgo', endDate: 'today' }],
+          dimensions: [{ name: 'pageTitle' }, { name: 'fullPageUrl' }],
+          metrics: [{ name: 'screenPageViews' }],
+          limit: '2500',
+          orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }]
+        });
+
+        for (const title of unresolved) {
+          const key = normalizeTitle(title);
+          const match = bestUrlMatch(title, fallbackReport);
+
+          if (match) {
+            pageUrlCache.set(key, { url: match.url, views: match.views });
+            unresolvedTitleCache.delete(key);
+          } else {
+            unresolvedTitleCache.set(key, Date.now());
           }
-        },
-        limit: '100',
-        orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }]
-      });
-      mergePageUrlCache(buildPageUrlMap(pageUrlReport));
+        }
+
+        pageUrlCacheAt = Date.now();
+      }
     }
 
     const timeline = fillTimeline(timelineReport);
