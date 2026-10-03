@@ -194,7 +194,7 @@ export default async function handler(req, res) {
     const allRealtimePageRows = rows(pagesReport)
       .filter((item) => item.unifiedScreenName && item.unifiedScreenName !== '(not set)');
     const activePageCount = allRealtimePageRows.length;
-    const realtimePageRows = allRealtimePageRows.slice(0, 8);
+    const realtimePageRows = allRealtimePageRows.slice(0, 50);
 
     const activeTitles = [...new Set(realtimePageRows.map((item) => item.unifiedScreenName))];
     const cacheOld = Date.now() - pageUrlCacheAt > PAGE_URL_CACHE_MS;
