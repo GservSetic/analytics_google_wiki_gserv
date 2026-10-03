@@ -10,6 +10,17 @@ const PAGE_URL_CACHE_MS = 5 * 60_000;
 const PAGE_URL_RETRY_MS = 10 * 60_000;
 const unresolvedTitleCache = new Map();
 
+const KNOWN_PAGE_URLS = new Map([
+  [
+    'atividades de gestao patrimonial e seu impacto na depreciacao',
+    'https://wiki.setic.ro.gov.br/pt-br/home/base_conhecimento/projetos/coge/pater_proj_depreciacao_sombrinha'
+  ],
+  [
+    'estudo para verificacao da tabela 03 natureza das rubricas da folha de pagamento',
+    'https://wiki.setic.ro.gov.br/pt-br/home/spaces/code/gc/estudos/tropadeelite7'
+  ]
+]);
+
 function normalizeTitle(value = '') {
   return String(value)
     .normalize('NFD')
@@ -101,10 +112,12 @@ function enrichRealtimePages(realtimeRows) {
     .filter((item) => item.unifiedScreenName && item.unifiedScreenName !== '(not set)')
     .slice(0, 8)
     .map((item) => {
-      const match = pageUrlCache.get(normalizeTitle(item.unifiedScreenName));
+      const key = normalizeTitle(item.unifiedScreenName);
+      const match = pageUrlCache.get(key);
+      const knownUrl = KNOWN_PAGE_URLS.get(key);
       return {
         name: item.unifiedScreenName,
-        url: match?.url || null,
+        url: match?.url || knownUrl || null,
         activeUsers: item.activeUsers || 0,
         views: item.screenPageViews || 0
       };
@@ -159,11 +172,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [timelineReport, pagesReport] = await Promise.all([
+    const [summaryReport, timelineReport, pagesReport] = await Promise.all([
+      runRealtimeReport({
+        metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }, { name: 'eventCount' }]
+      }),
       runRealtimeReport({
         dimensions: [{ name: 'minutesAgo' }],
         metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }, { name: 'eventCount' }],
-        metricAggregations: ['TOTAL'],
         minuteRanges: [{ startMinutesAgo: 29, endMinutesAgo: 0 }],
         orderBys: [{ dimension: { dimensionName: 'minutesAgo' }, desc: true }]
       }),
@@ -175,7 +190,7 @@ export default async function handler(req, res) {
       })
     ]);
 
-    const summary = aggregateMetrics(timelineReport);
+    const summary = rows(summaryReport)[0] || {};
     const allRealtimePageRows = rows(pagesReport)
       .filter((item) => item.unifiedScreenName && item.unifiedScreenName !== '(not set)');
     const activePageCount = allRealtimePageRows.length;
