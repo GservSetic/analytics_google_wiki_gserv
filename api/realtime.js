@@ -12,6 +12,10 @@ const unresolvedTitleCache = new Map();
 
 const KNOWN_PAGE_URLS = new Map([
   [
+    'demandas',
+    'https://wiki.setic.ro.gov.br/pt-br/home/spaces/code/migration/Ferramentas/gitlab/informacoes_adicionais/gitlab_esteira_automocao'
+  ],
+  [
     'atividades de gestao patrimonial e seu impacto na depreciacao',
     'https://wiki.setic.ro.gov.br/pt-br/home/base_conhecimento/projetos/coge/pater_proj_depreciacao_sombrinha'
   ],
