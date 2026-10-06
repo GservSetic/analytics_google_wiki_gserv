@@ -2720,3 +2720,31 @@ body.embed-mode {
     animation: none;
   }
 }
+
+
+/* ===== OWN REALTIME COUNTER ===== */
+.realtime-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metric-card.counter-live {
+  border-color: rgba(34, 157, 105, .24);
+}
+
+.metric-card.counter-live .metric-caption::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #20ad70;
+  box-shadow: 0 0 0 3px rgba(32,173,112,.08);
+  vertical-align: 1px;
+}
+
+@media (max-width: 620px) {
+  .realtime-stats {
+    grid-template-columns: 1fr;
+  }
+}
