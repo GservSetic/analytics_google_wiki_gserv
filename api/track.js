@@ -1,11 +1,11 @@
+import { counterConfigured, recordActivity } from './_counter.js';
+
 const ALLOWED_ORIGINS = new Set([
   'https://wiki.setic.ro.gov.br',
   'https://playground-wiki.setic.ro.gov.br'
 ]);
 
-function counterUrl() {
-  return process.env.COUNTER_EDGE_URL?.trim() || '';
-}
+const ID_RE = /^[a-z0-9-]{8,80}$/i;
 
 function setCors(req, res) {
   const origin = String(req.headers.origin || '');
@@ -18,9 +18,9 @@ function setCors(req, res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
 }
 
-function isAllowedOrigin(req) {
-  const origin = String(req.headers.origin || '');
-  return ALLOWED_ORIGINS.has(origin);
+function cleanPath(value) {
+  const path = String(value || '/').slice(0, 600);
+  return path.startsWith('/') ? path : '/';
 }
 
 export default async function handler(req, res) {
@@ -29,25 +29,44 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido.' });
 
-  const edgeUrl = counterUrl();
-  if (!edgeUrl) return res.status(503).json({ error: 'Contador próprio ainda não configurado.' });
-  if (!isAllowedOrigin(req)) return res.status(403).json({ error: 'Origem não autorizada.' });
+  const origin = String(req.headers.origin || '');
+  if (!ALLOWED_ORIGINS.has(origin)) {
+    return res.status(403).json({ error: 'Origem não autorizada.' });
+  }
+
+  if (!counterConfigured()) {
+    return res.status(503).json({ error: 'Contador próprio ainda não configurado.' });
+  }
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    const response = await fetch(`${edgeUrl}?mode=track`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Wiki-Origin': String(req.headers.origin || '')
-      },
-      body: JSON.stringify(body)
+    const type = body.type === 'heartbeat' ? 'heartbeat' : body.type === 'pageview' ? 'pageview' : null;
+
+    if (
+      !type ||
+      !ID_RE.test(String(body.eventId || '')) ||
+      !ID_RE.test(String(body.visitorId || '')) ||
+      !ID_RE.test(String(body.sessionId || ''))
+    ) {
+      return res.status(400).json({ error: 'Evento inválido.' });
+    }
+
+    const host = String(body.host || '').toLowerCase();
+    if (!['wiki.setic.ro.gov.br', 'playground-wiki.setic.ro.gov.br'].includes(host)) {
+      return res.status(400).json({ error: 'Host inválido.' });
+    }
+
+    const result = await recordActivity({
+      type,
+      eventId: String(body.eventId),
+      visitorId: String(body.visitorId),
+      sessionId: String(body.sessionId),
+      host,
+      path: cleanPath(body.path),
+      title: String(body.title || '').slice(0, 240)
     });
 
-    const text = await response.text();
-    res.status(response.status);
-    res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json; charset=utf-8');
-    return res.send(text);
+    return res.status(202).json(result);
   } catch (error) {
     return res.status(502).json({ error: 'Falha ao registrar atividade.', detail: error.message });
   }
