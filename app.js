@@ -4,6 +4,8 @@ const state = {
   realtime: null,
   timer: null,
   reportTimer: null,
+  counter: null,
+  counterTimer: null,
   lastRealtimeUsers: null,
   pageDetail: null,
   pageDetailRange: '7d',
@@ -136,6 +138,21 @@ async function loadRealtime() {
   }
 }
 
+async function loadCounter() {
+  try {
+    const counter = await getJson('/api/live-counter');
+    state.counter = counter;
+
+    if (!counter?.enabled) return;
+
+    renderCounter(counter);
+    updateTimestamp(counter.generatedAt);
+    $('syncLabel').textContent = counter.degraded ? 'Contador em recuperação' : 'Sincronizado';
+  } catch {
+    // O GA4 permanece como fallback quando o contador próprio estiver indisponível.
+  }
+}
+
 function renderReport(data) {
   const summary = data.summary || {};
   animateNumber($('metricUsers'), summary.activeUsers);
@@ -144,7 +161,20 @@ function renderReport(data) {
   animateNumber($('metricEngagement'), (summary.engagementRate || 0) * 100, (n) => `${n.toFixed(1).replace('.', ',')}%`);
   animateNumber($('metricTime'), summary.avgEngagementSeconds || 0, (n) => formatSeconds(n));
 
-  $('metricUsersCaption').textContent = state.range === 'today' ? 'Usuários ativos hoje' : 'Usuários no período selecionado';
+  $('metricUsersLabel').textContent = state.range === 'today' ? 'Usuários ativos' : 'Usuários';
+  $('metricSessionsLabel').textContent = 'Sessões';
+  $('metricViewsLabel').textContent = 'Visualizações';
+  $('metricUsersCaption').textContent = state.range === 'today'
+    ? 'Usuários de hoje já processados pelo GA4'
+    : 'Usuários no período selecionado';
+  $('metricSessionsCaption').textContent = state.range === 'today'
+    ? 'Sessões de hoje já processadas pelo GA4'
+    : 'Sessões iniciadas no período';
+  $('metricViewsCaption').textContent = state.range === 'today'
+    ? 'Visualizações de hoje já processadas pelo GA4'
+    : 'Visualizações de páginas';
+
+  document.querySelectorAll('.metric-card').forEach((card) => card.classList.remove('counter-live'));
 
   renderSmartSummary(data);
   renderTrend(data.trend || data.daily || [], data.trendGranularity || 'day');
@@ -155,6 +185,65 @@ function renderReport(data) {
   renderEngagement(data.pages || []);
   renderDevices(data.devices || []);
   renderCities(data.cities || []);
+
+  if (state.counter?.enabled && state.range === 'today') {
+    renderCounter(state.counter);
+  }
+}
+
+function renderCounter(data) {
+  if (!data?.enabled) return;
+
+  const today = data.today || {};
+  const realtime = data.realtime || {};
+  const coverage = data.coverage || {};
+
+  if (state.range === 'today') {
+    animateNumber($('metricUsers'), today.users || 0);
+    animateNumber($('metricSessions'), today.sessions || 0);
+    animateNumber($('metricViews'), today.views || 0);
+
+    $('metricUsersLabel').textContent = 'Usuários únicos hoje';
+    $('metricSessionsLabel').textContent = 'Sessões hoje';
+    $('metricViewsLabel').textContent = 'Visualizações hoje';
+
+    const trackingSince = coverage.trackingSince ? new Date(coverage.trackingSince) : null;
+    const startLabel = trackingSince && !Number.isNaN(trackingSince.getTime())
+      ? trackingSince.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      : null;
+    const completeDay = coverage.completeDay !== false;
+    const sourceLabel = completeDay
+      ? 'Contador próprio · tempo quase real'
+      : `Contador próprio desde ${startLabel || 'a ativação'}`;
+
+    $('metricUsersCaption').textContent = sourceLabel;
+    $('metricSessionsCaption').textContent = sourceLabel;
+    $('metricViewsCaption').textContent = sourceLabel;
+
+    ['metricUsers', 'metricSessions', 'metricViews'].forEach((id) => {
+      $(id)?.closest('.metric-card')?.classList.add('counter-live');
+    });
+
+    const coverageNote = completeDay
+      ? 'Dados próprios atualizados quase em tempo real, sem aguardar o processamento intradiário do GA4.'
+      : `O contador foi ativado hoje${startLabel ? ` às ${startLabel}` : ''}; os totais passam a cobrir o dia inteiro a partir do próximo dia.`;
+
+    $('smartSummaryText').textContent =
+      `Hoje, o contador da Wiki registra ${fmt.format(today.users || 0)} usuários únicos, ${fmt.format(today.sessions || 0)} sessões e ${fmt.format(today.views || 0)} visualizações. ` +
+      `Nos últimos 30 minutos, ${fmt.format(realtime.activeUsers30m || 0)} usuários estiveram ativos e ocorreram ${fmt.format(realtime.views30m || 0)} visualizações.`;
+    $('anomalyDetail').textContent = coverageNote;
+  }
+
+  renderCounterRealtime(data);
+}
+
+function renderCounterRealtime(data) {
+  const realtime = data?.realtime || {};
+  animateNumber($('realtimeUsers'), realtime.activeUsers30m || 0);
+  animateNumber($('realtimeViews'), realtime.views30m || 0);
+  animateNumber($('realtimeSessions'), realtime.sessions30m || 0);
+  $('realtimeUsersLabel').textContent = 'Usuários ativos · 30 min';
+  $('realtimeNote').textContent = 'Contador próprio · atualização a cada 15s';
 }
 
 function renderSmartSummary(data) {
@@ -176,7 +265,10 @@ function renderSmartSummary(data) {
 function renderRealtime(data) {
   animateNumber($('realtimeUsers'), data.summary?.activeUsers || 0);
   animateNumber($('realtimeViews'), data.summary?.views || 0);
+  $('realtimeSessions').textContent = '—';
   animateNumber($('realtimeEvents'), data.summary?.events || 0);
+  $('realtimeUsersLabel').textContent = 'Usuários ativos · 30 min';
+  $('realtimeNote').textContent = 'GA4 Realtime · atualização automática a cada 60s';
 
   renderRealtimeChart(data.timeline || []);
 
@@ -220,6 +312,10 @@ function renderRealtime(data) {
   }).join('') : '<span class="muted">Nenhuma atividade recente.</span>';
 
   bindPageDetailButtons();
+
+  if (state.counter?.enabled) {
+    renderCounterRealtime(state.counter);
+  }
 }
 
 function renderRealtimeChart(list) {
@@ -1000,10 +1096,11 @@ async function boot() {
   initEmbedMode();
   bindControls();
   initPremiumVisuals();
-  await Promise.all([loadReport(), loadRealtime()]);
+  await Promise.all([loadReport(), loadRealtime(), loadCounter()]);
   document.body.classList.add('premium-data-ready');
   state.timer = setInterval(loadRealtime, 60_000);
   state.reportTimer = setInterval(loadReport, 120_000);
+  state.counterTimer = setInterval(loadCounter, 15_000);
 }
 
 boot();
