@@ -239,11 +239,12 @@ function renderCounter(data) {
 
 function renderCounterRealtime(data) {
   const realtime = data?.realtime || {};
-  animateNumber($('realtimeUsers'), realtime.activeUsers30m || 0);
+  animateNumber($('realtimeUsers'), realtime.activeUsersNow || 0);
+  animateNumber($('realtimeUsers30m'), realtime.activeUsers30m || 0);
   animateNumber($('realtimeViews'), realtime.views30m || 0);
   animateNumber($('realtimeSessions'), realtime.sessions30m || 0);
-  $('realtimeUsersLabel').textContent = 'Usuários ativos · 30 min';
-  $('realtimeNote').textContent = 'Contador próprio · atualização a cada 15s';
+  $('realtimeUsersLabel').textContent = 'Usuários agora';
+  $('realtimeNote').textContent = 'Atividade nos últimos 5 min · atualização a cada 15s';
 }
 
 function renderSmartSummary(data) {
@@ -264,6 +265,7 @@ function renderSmartSummary(data) {
 
 function renderRealtime(data) {
   animateNumber($('realtimeUsers'), data.summary?.activeUsers || 0);
+  animateNumber($('realtimeUsers30m'), data.summary?.activeUsers || 0);
   animateNumber($('realtimeViews'), data.summary?.views || 0);
   $('realtimeSessions').textContent = '—';
   animateNumber($('realtimeEvents'), data.summary?.events || 0);
