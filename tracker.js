@@ -62,9 +62,11 @@
     };
   }
 
+  let pageviewPending = false;
+
   async function send(type) {
     try {
-      await fetch(ENDPOINT, {
+      const response = await fetch(ENDPOINT, {
         method: 'POST',
         mode: 'cors',
         credentials: 'omit',
@@ -72,8 +74,15 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload(type))
       });
+
+      if (type === 'pageview' && response.ok) {
+        pageviewPending = false;
+      }
+
+      return response.ok;
     } catch {
       // O rastreamento nunca deve interferir na navegação da Wiki.
+      return false;
     }
   }
 
@@ -84,6 +93,7 @@
     const path = location.pathname || '/';
     if (!force && path === lastTrackedPath) return;
     lastTrackedPath = path;
+    pageviewPending = true;
     clearTimeout(routeTimer);
     routeTimer = setTimeout(() => send('pageview'), 180);
   }
@@ -103,7 +113,9 @@
   };
 
   addEventListener('popstate', () => trackPage());
-  addEventListener('pageshow', () => trackPage(true));
+  addEventListener('pageshow', (event) => {
+    if (event.persisted) trackPage(true);
+  });
 
   let lastTitle = document.title;
   const titleObserver = new MutationObserver(() => {
@@ -117,11 +129,14 @@
   if (titleNode) titleObserver.observe(titleNode, { childList: true, subtree: true });
 
   setInterval(() => {
-    if (document.visibilityState === 'visible') send('heartbeat');
+    if (document.visibilityState !== 'visible') return;
+    send(pageviewPending ? 'pageview' : 'heartbeat');
   }, HEARTBEAT_MS);
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') send('heartbeat');
+    if (document.visibilityState === 'visible') {
+      send(pageviewPending ? 'pageview' : 'heartbeat');
+    }
   });
 
   trackPage(true);
