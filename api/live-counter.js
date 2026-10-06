@@ -1,6 +1,4 @@
-function counterUrl() {
-  return process.env.COUNTER_EDGE_URL?.trim() || '';
-}
+import { counterConfigured, pingCounter, readCounterStats } from './_counter.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
@@ -9,26 +7,22 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método não permitido.' });
   }
 
-  const edgeUrl = counterUrl();
-  if (!edgeUrl) {
+  if (!counterConfigured()) {
     return res.status(200).json({
       enabled: false,
       source: 'ga4',
-      message: 'Contador próprio aguardando configuração.'
+      message: 'Contador próprio aguardando conexão Redis.'
     });
   }
 
   try {
-    const response = await fetch(`${edgeUrl}?mode=stats`, {
-      headers: { 'Accept': 'application/json' }
+    await pingCounter();
+    const stats = await readCounterStats();
+    return res.status(200).json({
+      enabled: true,
+      source: 'wiki-counter',
+      ...stats
     });
-
-    if (!response.ok) {
-      throw new Error(`contador respondeu ${response.status}: ${await response.text()}`);
-    }
-
-    const data = await response.json();
-    return res.status(200).json({ enabled: true, source: 'wiki-counter', ...data });
   } catch (error) {
     return res.status(200).json({
       enabled: false,
