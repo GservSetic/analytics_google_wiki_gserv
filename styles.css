@@ -2724,7 +2724,7 @@ body.embed-mode {
 
 /* ===== OWN REALTIME COUNTER ===== */
 .realtime-stats {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .metric-card.counter-live {
