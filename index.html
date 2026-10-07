@@ -152,7 +152,7 @@
         </article>
 
         <article class="panel pages-panel">
-          <div class="panel-header compact"><div><p class="panel-kicker">CONTEÚDO</p><h2>Páginas mais acessadas</h2></div><span class="muted">por visualizações</span></div>
+          <div class="panel-header compact"><div><p class="panel-kicker">CONTEÚDO</p><h2>Páginas mais acessadas</h2></div><span class="muted" id="pagesSourceLabel">por visualizações</span></div>
           <div class="rank-list" id="pageList"></div>
         </article>
 
@@ -192,7 +192,7 @@
         </article>
 
         <article class="panel audience-panel">
-          <div class="panel-header compact"><div><p class="panel-kicker">AUDIÊNCIA</p><h2>Dispositivos</h2></div></div>
+          <div class="panel-header compact"><div><p class="panel-kicker">AUDIÊNCIA</p><h2>Dispositivos</h2></div><span class="muted" id="audienceSourceLabel">usuários</span></div>
           <div class="donut-layout">
             <div class="donut" id="deviceDonut"><div class="donut-center"><strong id="deviceTotal">—</strong><span>usuários</span></div></div>
             <div class="device-list" id="deviceList"></div>
@@ -206,7 +206,7 @@
               <h2>Engajamento por página</h2>
               <p class="chart-subtitle">Compare volume de acesso com o tempo efetivamente dedicado ao conteúdo.</p>
             </div>
-            <span class="muted">clique na página para analisar</span>
+            <span class="muted" id="engagementSourceLabel">clique na página para analisar</span>
           </div>
           <div class="engagement-table-wrap">
             <table class="engagement-table">
@@ -234,7 +234,7 @@
         </article>
 
         <article class="panel cities-panel">
-          <div class="panel-header compact"><div><p class="panel-kicker">LOCALIZAÇÃO</p><h2>Principais cidades</h2></div><span class="muted">usuários ativos</span></div>
+          <div class="panel-header compact"><div><p class="panel-kicker">LOCALIZAÇÃO</p><h2>Principais cidades</h2></div><span class="muted" id="citiesSourceLabel">usuários ativos</span></div>
           <div class="city-list" id="cityList"></div>
         </article>
 
@@ -257,14 +257,14 @@
         <article class="panel sources-panel">
           <div class="panel-header compact">
             <div><p class="panel-kicker">AQUISIÇÃO</p><h2>Origem dos acessos</h2></div>
-            <span class="muted">sessões</span>
+            <span class="muted" id="sourcesSourceLabel">sessões</span>
           </div>
           <div class="source-list" id="sourceList"></div>
         </article>
       </section>
 
       <footer class="footer">
-        <span>Fonte: Google Analytics 4 · Wiki SETIC</span>
+        <span>Fontes: Contador próprio da Wiki + Google Analytics 4</span>
         <span id="footerMode">Dados de demonstração</span>
       </footer>
     </main>
