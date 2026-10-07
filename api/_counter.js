@@ -126,7 +126,9 @@ function todayKeys(date = new Date()) {
     breakdownSessions: `${prefix}:breakdown_sessions`,
     pageRank: `${prefix}:pages:rank`,
     cityRank: `${prefix}:cities:rank`,
-    cityVisitorMap: `${prefix}:cities:visitor_map`
+    cityVisitorMap: `${prefix}:cities:visitor_map`,
+    sourceRank: `${prefix}:sources:rank`,
+    sourceSessionMap: `${prefix}:sources:session_map`
   };
 }
 
@@ -180,6 +182,51 @@ function deviceKeys(dayKeys, device) {
 
 function cityUsersKey(dayKeys, city) {
   return `${dayKeys.prefix}:city:${safeId(city)}:users`;
+}
+
+function sourceUsersKey(dayKeys, source) {
+  return `${dayKeys.prefix}:source:${safeId(source)}:users`;
+}
+
+function sourceSessionsKey(dayKeys, source) {
+  return `${dayKeys.prefix}:source:${safeId(source)}:sessions`;
+}
+
+function sourceFromEvent(event) {
+  try {
+    const entry = new URL(event.entryUrl || `https://${event.host}/`);
+    const utmSource = entry.searchParams.get('utm_source');
+    const utmMedium = entry.searchParams.get('utm_medium');
+    if (utmSource) return `${utmSource} / ${utmMedium || 'campaign'}`;
+  } catch {}
+
+  const raw = String(event.referrer || '').trim();
+  if (!raw) return '(direct) / (none)';
+
+  try {
+    const referrer = new URL(raw);
+    const host = referrer.hostname.toLowerCase();
+    if (host === String(event.host || '').toLowerCase()) return '(internal) / navigation';
+    if (/^(www\.)?google\./i.test(host)) return 'google / organic';
+    if (/^(www\.)?bing\.com$/i.test(host)) return 'bing / organic';
+    if (/^(www\.)?chatgpt\.com$/i.test(host)) return 'chatgpt.com / ai-assistant';
+    return `${host} / referral`;
+  } catch {
+    return '(direct) / (none)';
+  }
+}
+
+function sourceLabel(value = '') {
+  const raw = String(value);
+  if (raw === '(direct) / (none)') return 'Acesso direto';
+  if (raw === '(internal) / navigation') return 'Navegação interna';
+  if (/google\s*\/\s*organic/i.test(raw)) return 'Google · orgânico';
+  if (/bing\s*\/\s*organic/i.test(raw)) return 'Bing · orgânico';
+  if (/chatgpt\.com\s*\/\s*ai-assistant/i.test(raw)) return 'ChatGPT · assistente de IA';
+  return raw
+    .replace(' / referral', '')
+    .replace(' / organic', ' · orgânico')
+    .replace(' / ai-assistant', ' · assistente de IA');
 }
 
 function normalizeDevice(value) {
@@ -265,6 +312,7 @@ export async function recordActivity(event) {
 
   const city = String(event.city || 'Não informado').slice(0, 120);
   const cityKey = cityUsersKey(dayKeys, city);
+  const source = sourceFromEvent(event);
 
   activityCommands.push(
     ['SET', keys.breakdownTrackingSince, new Date(now).toISOString(), 'NX'],
@@ -300,11 +348,9 @@ export async function recordActivity(event) {
     ['EXPIRE', dayKeys.cityRank, COUNTER_TTL_SECONDS]
   );
 
-  const cityWasAssigned = await command([
-    'HSETNX',
-    dayKeys.cityVisitorMap,
-    event.visitorId,
-    city
+  const [cityWasAssigned, sourceWasAssigned] = await Promise.all([
+    command(['HSETNX', dayKeys.cityVisitorMap, event.visitorId, city]),
+    command(['HSETNX', dayKeys.sourceSessionMap, event.sessionId, source])
   ]);
 
   if (cityWasAssigned) {
@@ -313,7 +359,22 @@ export async function recordActivity(event) {
       ['EXPIRE', cityKey, COUNTER_TTL_SECONDS]
     );
   }
-  activityCommands.push(['EXPIRE', dayKeys.cityVisitorMap, COUNTER_TTL_SECONDS]);
+
+  if (sourceWasAssigned) {
+    activityCommands.push(
+      ['ZINCRBY', dayKeys.sourceRank, 1, source],
+      ['SADD', sourceUsersKey(dayKeys, source), event.visitorId],
+      ['SADD', sourceSessionsKey(dayKeys, source), event.sessionId],
+      ['EXPIRE', dayKeys.sourceRank, COUNTER_TTL_SECONDS],
+      ['EXPIRE', sourceUsersKey(dayKeys, source), COUNTER_TTL_SECONDS],
+      ['EXPIRE', sourceSessionsKey(dayKeys, source), COUNTER_TTL_SECONDS]
+    );
+  }
+
+  activityCommands.push(
+    ['EXPIRE', dayKeys.cityVisitorMap, COUNTER_TTL_SECONDS],
+    ['EXPIRE', dayKeys.sourceSessionMap, COUNTER_TTL_SECONDS]
+  );
 
   await pipeline(activityCommands);
   return { ok: true, day: dayKeys.day };
@@ -410,6 +471,50 @@ async function readCities(dayKeys, totalUsers) {
   return shown;
 }
 
+
+async function readSources(dayKeys, totalSessions) {
+  const ranked = await command(['ZREVRANGE', dayKeys.sourceRank, 0, 9, 'WITHSCORES']);
+  const flat = Array.isArray(ranked) ? ranked : [];
+  const sources = [];
+
+  for (let index = 0; index < flat.length; index += 2) {
+    sources.push({
+      name: flat[index],
+      sessions: asNumber(flat[index + 1])
+    });
+  }
+
+  if (!sources.length) {
+    return totalSessions
+      ? [{ name: '(unclassified)', label: 'Ainda não classificado', sessions: totalSessions, activeUsers: 0 }]
+      : [];
+  }
+
+  const counts = await pipeline(
+    sources.map((item) => ['SCARD', sourceUsersKey(dayKeys, item.name)])
+  );
+
+  const result = sources.map((item, index) => ({
+    ...item,
+    label: sourceLabel(item.name),
+    activeUsers: asNumber(counts[index])
+  }));
+
+  const classifiedSessions = result.reduce((sum, item) => sum + item.sessions, 0);
+  const missingSessions = Math.max(0, totalSessions - classifiedSessions);
+
+  if (missingSessions) {
+    result.push({
+      name: '(unclassified)',
+      label: 'Antes da medição detalhada',
+      sessions: missingSessions,
+      activeUsers: 0
+    });
+  }
+
+  return result;
+}
+
 async function readPages(dayKeys) {
   const ranked = await command(['ZREVRANGE', dayKeys.pageRank, 0, 14, 'WITHSCORES']);
   const flat = Array.isArray(ranked) ? ranked : [];
@@ -504,11 +609,12 @@ export async function readCounterStats() {
   const totalEngagementSeconds = asNumber(engagementSeconds);
   const totalEngagedSessions = asNumber(engagedSessions);
 
-  const [trend, devices, cities, pages] = await Promise.all([
+  const [trend, devices, cities, pages, sources] = await Promise.all([
     readTrend(dayKeys),
     readDevices(dayKeys, totalUsers, totalSessions),
     readCities(dayKeys, totalUsers),
-    readPages(dayKeys)
+    readPages(dayKeys),
+    readSources(dayKeys, totalSessions)
   ]);
 
   const trackingDate = trackingSince ? new Date(trackingSince) : null;
@@ -549,6 +655,7 @@ export async function readCounterStats() {
     pages,
     devices,
     cities,
+    sources,
     coverage: {
       trackingSince: trackingSince || null,
       completeDay,
