@@ -82,6 +82,8 @@ export default async function handler(req, res) {
       host,
       path: cleanPath(body.path),
       title: String(body.title || '').slice(0, 240),
+      referrer: String(body.referrer || '').slice(0, 600),
+      entryUrl: String(body.entryUrl || '').slice(0, 900),
       activeSeconds: Number(body.activeSeconds || 0),
       device: deviceFromUserAgent(req.headers['user-agent'] || ''),
       city: decodeGeoHeader(req.headers['x-vercel-ip-city']) || 'Não informado'
