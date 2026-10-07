@@ -39,9 +39,16 @@
     } catch {}
 
     if (!session?.id || !session?.lastActivity || now - session.lastActivity > SESSION_TIMEOUT_MS) {
-      session = { id: uuid(), lastActivity: now };
+      session = {
+        id: uuid(),
+        lastActivity: now,
+        referrer: document.referrer || '',
+        entryUrl: location.href
+      };
     } else {
       session.lastActivity = now;
+      if (session.referrer === undefined) session.referrer = document.referrer || '';
+      if (!session.entryUrl) session.entryUrl = location.href;
     }
 
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -58,6 +65,8 @@
       host: location.hostname,
       path: location.pathname || '/',
       title: (document.title || '').slice(0, 240),
+      referrer: (session.referrer || '').slice(0, 600),
+      entryUrl: (session.entryUrl || location.href).slice(0, 900),
       sentAt: new Date().toISOString(),
       ...extra
     };
