@@ -185,6 +185,7 @@ function renderReport(data) {
   if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = state.range === 'today' ? 'GA4 · processado' : 'clique na página para analisar';
   if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = state.range === 'today' ? 'GA4 · processado' : 'usuários ativos';
   if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = state.range === 'today' ? 'GA4 · dados processados' : 'sessões';
+  if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = state.range === 'today' ? 'GA4 · dados processados' : 'ações registradas';
 
   document.querySelectorAll('.metric-card').forEach((card) => card.classList.remove('counter-live'));
 
@@ -253,13 +254,15 @@ function renderCounter(data) {
     if ($('audienceSourceLabel')) $('audienceSourceLabel').textContent = breakdownComplete ? 'usuários únicos hoje' : detailLabel;
     if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = detailLabel;
     if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = breakdownComplete ? 'usuários únicos hoje' : detailLabel;
-    if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = 'GA4 · dados processados';
+    if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = breakdownComplete ? 'sessões hoje · contador próprio' : detailLabel;
+    if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = 'GA4 · dados processados';
 
     renderTrend(data.trend || [], 'hour');
     renderPages(data.pages || []);
     renderEngagement(data.pages || []);
     renderDevices(data.devices || []);
     renderCities(data.cities || []);
+    renderSources(data.sources || []);
 
     const coverageNote = !completeDay
       ? `O contador geral foi ativado hoje${startLabel ? ` às ${startLabel}` : ''}; o dia completo estará disponível a partir do próximo dia.`
