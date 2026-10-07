@@ -470,6 +470,8 @@ export async function readCounterStats() {
     users,
     sessions,
     views,
+    breakdownUsers,
+    breakdownSessions,
     engagementSeconds,
     engagedSessions,
     activeUsers30m,
@@ -482,6 +484,8 @@ export async function readCounterStats() {
     ['SCARD', dayKeys.users],
     ['SCARD', dayKeys.sessions],
     ['GET', dayKeys.views],
+    ['SCARD', dayKeys.breakdownUsers],
+    ['SCARD', dayKeys.breakdownSessions],
     ['GET', dayKeys.engagementSeconds],
     ['SCARD', dayKeys.engagedSessions],
     ['ZCOUNT', keys.activeUsers, score - ACTIVE_WINDOW_SECONDS, '+inf'],
@@ -495,6 +499,8 @@ export async function readCounterStats() {
   const totalUsers = asNumber(users);
   const totalSessions = asNumber(sessions);
   const totalViews = asNumber(views);
+  const detailedUsers = asNumber(breakdownUsers);
+  const detailedSessions = asNumber(breakdownSessions);
   const totalEngagementSeconds = asNumber(engagementSeconds);
   const totalEngagedSessions = asNumber(engagedSessions);
 
@@ -526,8 +532,10 @@ export async function readCounterStats() {
       users: totalUsers,
       sessions: totalSessions,
       views: totalViews,
-      engagementRate: totalSessions > 0 ? Math.min(1, totalEngagedSessions / totalSessions) : 0,
-      avgEngagementSeconds: totalSessions > 0 ? totalEngagementSeconds / totalSessions : 0
+      engagementRate: detailedSessions > 0 ? Math.min(1, totalEngagedSessions / detailedSessions) : 0,
+      avgEngagementSeconds: detailedSessions > 0 ? totalEngagementSeconds / detailedSessions : 0,
+      detailedUsers,
+      detailedSessions
     },
     realtime: {
       activeUsersNow: asNumber(activeUsersNow),
