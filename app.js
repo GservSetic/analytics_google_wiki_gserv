@@ -165,14 +165,26 @@ function renderReport(data) {
   $('metricSessionsLabel').textContent = 'Sessões';
   $('metricViewsLabel').textContent = 'Visualizações';
   $('metricUsersCaption').textContent = state.range === 'today'
-    ? 'Usuários de hoje já processados pelo GA4'
+    ? 'GA4 · dados de hoje já processados'
     : 'Usuários no período selecionado';
   $('metricSessionsCaption').textContent = state.range === 'today'
-    ? 'Sessões de hoje já processadas pelo GA4'
+    ? 'GA4 · dados de hoje já processados'
     : 'Sessões iniciadas no período';
   $('metricViewsCaption').textContent = state.range === 'today'
-    ? 'Visualizações de hoje já processadas pelo GA4'
+    ? 'GA4 · dados de hoje já processados'
     : 'Visualizações de páginas';
+  $('metricEngagementCaption').textContent = state.range === 'today'
+    ? 'GA4 · dados de hoje já processados'
+    : 'Taxa de sessões engajadas';
+  $('metricTimeCaption').textContent = state.range === 'today'
+    ? 'GA4 · dados de hoje já processados'
+    : 'Engajamento por sessão';
+
+  if ($('pagesSourceLabel')) $('pagesSourceLabel').textContent = state.range === 'today' ? 'GA4 · processado' : 'por visualizações';
+  if ($('audienceSourceLabel')) $('audienceSourceLabel').textContent = state.range === 'today' ? 'GA4 · processado' : 'usuários';
+  if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = state.range === 'today' ? 'GA4 · processado' : 'clique na página para analisar';
+  if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = state.range === 'today' ? 'GA4 · processado' : 'usuários ativos';
+  if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = state.range === 'today' ? 'GA4 · dados processados' : 'sessões';
 
   document.querySelectorAll('.metric-card').forEach((card) => card.classList.remove('counter-live'));
 
@@ -202,35 +214,64 @@ function renderCounter(data) {
     animateNumber($('metricUsers'), today.users || 0);
     animateNumber($('metricSessions'), today.sessions || 0);
     animateNumber($('metricViews'), today.views || 0);
+    animateNumber($('metricEngagement'), (today.engagementRate || 0) * 100, (n) => `${n.toFixed(1).replace('.', ',')}%`);
+    animateNumber($('metricTime'), today.avgEngagementSeconds || 0, (n) => formatSeconds(n));
 
     $('metricUsersLabel').textContent = 'Usuários únicos hoje';
     $('metricSessionsLabel').textContent = 'Sessões hoje';
     $('metricViewsLabel').textContent = 'Visualizações hoje';
 
     const trackingSince = coverage.trackingSince ? new Date(coverage.trackingSince) : null;
+    const breakdownSince = coverage.breakdownTrackingSince ? new Date(coverage.breakdownTrackingSince) : null;
     const startLabel = trackingSince && !Number.isNaN(trackingSince.getTime())
       ? trackingSince.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       : null;
+    const breakdownLabel = breakdownSince && !Number.isNaN(breakdownSince.getTime())
+      ? breakdownSince.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      : null;
+
     const completeDay = coverage.completeDay !== false;
+    const breakdownComplete = coverage.breakdownCompleteDay === true;
     const sourceLabel = completeDay
       ? 'Contador próprio · tempo quase real'
       : `Contador próprio desde ${startLabel || 'a ativação'}`;
+    const detailLabel = breakdownComplete
+      ? 'Contador próprio · hoje'
+      : `Contador próprio · detalhamento desde ${breakdownLabel || 'agora'}`;
 
     $('metricUsersCaption').textContent = sourceLabel;
     $('metricSessionsCaption').textContent = sourceLabel;
     $('metricViewsCaption').textContent = sourceLabel;
+    $('metricEngagementCaption').textContent = detailLabel;
+    $('metricTimeCaption').textContent = detailLabel;
 
-    ['metricUsers', 'metricSessions', 'metricViews'].forEach((id) => {
+    ['metricUsers', 'metricSessions', 'metricViews', 'metricEngagement', 'metricTime'].forEach((id) => {
       $(id)?.closest('.metric-card')?.classList.add('counter-live');
     });
 
-    const coverageNote = completeDay
-      ? 'Dados próprios atualizados quase em tempo real, sem aguardar o processamento intradiário do GA4.'
-      : `O contador foi ativado hoje${startLabel ? ` às ${startLabel}` : ''}; os totais passam a cobrir o dia inteiro a partir do próximo dia.`;
+    if ($('pagesSourceLabel')) $('pagesSourceLabel').textContent = detailLabel;
+    if ($('audienceSourceLabel')) $('audienceSourceLabel').textContent = breakdownComplete ? 'usuários únicos hoje' : detailLabel;
+    if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = detailLabel;
+    if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = breakdownComplete ? 'usuários únicos hoje' : detailLabel;
+    if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = 'GA4 · dados processados';
 
+    renderTrend(data.trend || [], 'hour');
+    renderPages(data.pages || []);
+    renderEngagement(data.pages || []);
+    renderDevices(data.devices || []);
+    renderCities(data.cities || []);
+
+    const coverageNote = !completeDay
+      ? `O contador geral foi ativado hoje${startLabel ? ` às ${startLabel}` : ''}; o dia completo estará disponível a partir do próximo dia.`
+      : !breakdownComplete
+        ? `Os totais de hoje cobrem o dia inteiro. O detalhamento por hora, página, dispositivo e cidade começou ${breakdownLabel ? `às ${breakdownLabel}` : 'agora'} e ficará completo a partir de amanhã.`
+        : 'Totais e detalhamentos de hoje vêm do contador próprio e são atualizados quase em tempo real.';
+
+    const topPage = data.pages?.[0];
     $('smartSummaryText').textContent =
-      `Hoje, o contador da Wiki registra ${fmt.format(today.users || 0)} usuários únicos, ${fmt.format(today.sessions || 0)} sessões e ${fmt.format(today.views || 0)} visualizações. ` +
-      `Nos últimos 30 minutos, ${fmt.format(realtime.activeUsers30m || 0)} usuários estiveram ativos e ocorreram ${fmt.format(realtime.views30m || 0)} visualizações.`;
+      `Hoje, a Wiki registra ${fmt.format(today.users || 0)} usuários únicos, ${fmt.format(today.sessions || 0)} sessões e ${fmt.format(today.views || 0)} visualizações. ` +
+      `Nos últimos 30 minutos, ${fmt.format(realtime.activeUsers30m || 0)} usuários estiveram ativos e ocorreram ${fmt.format(realtime.views30m || 0)} visualizações.` +
+      (topPage ? ` A página com maior movimento no detalhamento atual é ${topPage.label || shortLabel(topPage.name)}, com ${fmt.format(topPage.views || 0)} visualizações.` : '');
     $('anomalyDetail').textContent = coverageNote;
   }
 
@@ -557,7 +598,7 @@ function renderDevices(list) {
   });
   $('deviceDonut').style.background = `conic-gradient(${segments.join(',')})`;
 
-  const label = { desktop: 'Desktop', mobile: 'Mobile', tablet: 'Tablet' };
+  const label = { desktop: 'Desktop', mobile: 'Mobile', tablet: 'Tablet', other: 'Outro', unclassified: 'Ainda não classificado' };
   $('deviceList').innerHTML = list.map((item, index) => `
     <div class="device-item">
       <i style="background:${colors[index % colors.length]}"></i>
