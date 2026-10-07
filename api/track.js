@@ -23,6 +23,24 @@ function cleanPath(value) {
   return path.startsWith('/') ? path : '/';
 }
 
+function decodeGeoHeader(value) {
+  if (!value) return '';
+  try {
+    return decodeURIComponent(String(value).replace(/\+/g, ' ')).trim();
+  } catch {
+    return String(value).trim();
+  }
+}
+
+function deviceFromUserAgent(value = '') {
+  const ua = String(value).toLowerCase();
+  if (/ipad|tablet|playbook|silk|android(?!.*mobile)/i.test(ua)) return 'tablet';
+  if (/mobi|iphone|ipod|android/i.test(ua)) return 'mobile';
+  if (ua) return 'desktop';
+  return 'other';
+}
+
+
 export default async function handler(req, res) {
   setCors(req, res);
 
@@ -63,7 +81,10 @@ export default async function handler(req, res) {
       sessionId: String(body.sessionId),
       host,
       path: cleanPath(body.path),
-      title: String(body.title || '').slice(0, 240)
+      title: String(body.title || '').slice(0, 240),
+      activeSeconds: Number(body.activeSeconds || 0),
+      device: deviceFromUserAgent(req.headers['user-agent'] || ''),
+      city: decodeGeoHeader(req.headers['x-vercel-ip-city']) || 'Não informado'
     });
 
     return res.status(202).json(result);
