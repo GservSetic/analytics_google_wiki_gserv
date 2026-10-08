@@ -2,7 +2,7 @@ import { getVercelOidcToken } from '@vercel/oidc';
 
 const ANALYTICS_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
 const CLOUD_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
-const DEFAULT_PROPERTY_ID = '554924878';
+const DEFAULT_PROPERTY_ID = '558035356';
 const DEFAULT_PROJECT_NUMBER = '568010186513';
 const DEFAULT_SERVICE_ACCOUNT_EMAIL = 'wiki-analytics-dashboard@project-d0079f33-9005-473f-938.iam.gserviceaccount.com';
 const DEFAULT_POOL_ID = 'vercel-wiki';
