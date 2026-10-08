@@ -1,4 +1,5 @@
 import { isConfigured, rows, runRealtimeReport, runReport } from './_ga.js';
+import { counterConfigured, resolveCounterPageUrls } from './_counter.js';
 
 let realtimeCache = null;
 let realtimeCacheAt = 0;
@@ -24,6 +25,49 @@ const KNOWN_PAGE_URLS = new Map([
     'https://wiki.setic.ro.gov.br/pt-br/home/spaces/code/gc/estudos/tropadeelite7'
   ]
 ]);
+
+
+function eventLabel(value = '') {
+  const labels = {
+    click: 'Cliques em links',
+    file_download: 'Downloads de arquivos',
+    view_search_results: 'Buscas realizadas',
+    search: 'Buscas realizadas',
+    form_start: 'Formulários iniciados',
+    form_submit: 'Formulários enviados',
+    scroll: 'Rolagens de página',
+    video_start: 'Vídeos iniciados',
+    video_complete: 'Vídeos concluídos',
+    select_content: 'Seleções de conteúdo'
+  };
+  return labels[value] || String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function buildRealtimeEvents(report) {
+  const generic = new Set(['page_view', 'session_start', 'first_visit', 'user_engagement']);
+  const allRows = rows(report);
+  const items = allRows
+    .filter((item) => item.eventName && !generic.has(item.eventName))
+    .slice(0, 10)
+    .map((item) => ({
+      name: item.eventName,
+      label: eventLabel(item.eventName),
+      count: item.eventCount || 0,
+      activeUsers: item.activeUsers || 0,
+      derived: false
+    }));
+
+  const measuredNames = new Set(allRows.map((item) => item.eventName));
+  const expected = ['click', 'file_download', 'view_search_results'];
+  const missing = expected.filter((name) => !measuredNames.has(name));
+
+  return {
+    items,
+    instrumentationNote: missing.length
+      ? `Nos últimos 30 minutos ainda não houve registro de: ${missing.map((name) => eventLabel(name).toLocaleLowerCase('pt-BR')).join(', ')}.`
+      : null
+  };
+}
 
 function normalizeTitle(value = '') {
   return String(value)
@@ -175,7 +219,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [summaryReport, timelineReport, pagesReport] = await Promise.all([
+    const [summaryReport, timelineReport, pagesReport, eventsReport] = await Promise.all([
       runRealtimeReport({
         metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }, { name: 'eventCount' }]
       }),
@@ -190,6 +234,12 @@ export default async function handler(req, res) {
         metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }],
         limit: '100',
         orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }]
+      }),
+      runRealtimeReport({
+        dimensions: [{ name: 'eventName' }],
+        metrics: [{ name: 'eventCount' }, { name: 'activeUsers' }],
+        limit: '30',
+        orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }]
       })
     ]);
 
@@ -199,6 +249,20 @@ export default async function handler(req, res) {
     const realtimePageRows = allRealtimePageRows.slice(0, 50);
 
     const activeTitles = [...new Set(realtimePageRows.map((item) => item.unifiedScreenName))];
+
+    if (counterConfigured() && activeTitles.length) {
+      try {
+        const counterUrls = await resolveCounterPageUrls(activeTitles);
+        for (const [key, url] of counterUrls.entries()) {
+          pageUrlCache.set(key, { url, views: 0 });
+          unresolvedTitleCache.delete(key);
+        }
+        if (counterUrls.size) pageUrlCacheAt = Date.now();
+      } catch {
+        // O GA4 continua como fallback para resolução de URL.
+      }
+    }
+
     const cacheOld = Date.now() - pageUrlCacheAt > PAGE_URL_CACHE_MS;
     const now = Date.now();
 
@@ -261,6 +325,7 @@ export default async function handler(req, res) {
 
     const timeline = fillTimeline(timelineReport);
     const peak = timelinePeak(timeline);
+    const importantEvents = buildRealtimeEvents(eventsReport);
     const resolvedPages = enrichRealtimePages(realtimePageRows)
       .filter((item) => Boolean(item.url));
     const activePageCount = resolvedPages.length;
@@ -286,7 +351,9 @@ export default async function handler(req, res) {
           }
         : null,
       activePageCount,
-      pages: resolvedPages
+      pages: resolvedPages,
+      events: importantEvents.items,
+      eventInstrumentationNote: importantEvents.instrumentationNote
     };
 
     realtimeCache = payload;
