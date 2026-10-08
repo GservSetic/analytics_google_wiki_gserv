@@ -202,6 +202,11 @@ function renderReport(data) {
   if (state.counter?.enabled && state.range === 'today') {
     renderCounter(state.counter);
   }
+
+  if (state.range === 'today' && state.realtime && Array.isArray(state.realtime.events)) {
+    renderEvents(state.realtime.events, state.realtime.eventInstrumentationNote);
+    if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = 'GA4 Realtime · últimos 30 min';
+  }
 }
 
 function renderCounter(data) {
@@ -255,7 +260,9 @@ function renderCounter(data) {
     if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = detailLabel;
     if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = breakdownComplete ? 'usuários únicos hoje' : detailLabel;
     if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = breakdownComplete ? 'sessões hoje · contador próprio' : detailLabel;
-    if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = 'GA4 · dados processados';
+    if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = state.realtime && Array.isArray(state.realtime.events)
+      ? 'GA4 Realtime · últimos 30 min'
+      : 'GA4 · dados processados';
 
     renderTrend(data.trend || [], 'hour');
     renderPages(data.pages || []);
@@ -317,6 +324,11 @@ function renderRealtime(data) {
   $('realtimeNote').textContent = 'GA4 Realtime · atualização automática a cada 60s';
 
   renderRealtimeChart(data.timeline || []);
+
+  if (state.range === 'today') {
+    renderEvents(data.events || [], data.eventInstrumentationNote);
+    if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = 'GA4 Realtime · últimos 30 min';
+  }
 
   const peak = data.peak;
   $('realtimePeak').textContent = peak
