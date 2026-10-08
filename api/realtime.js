@@ -53,7 +53,7 @@ function buildRealtimeEvents(report) {
       name: item.eventName,
       label: eventLabel(item.eventName),
       count: item.eventCount || 0,
-      activeUsers: item.activeUsers || 0,
+      activeUsers: 0,
       derived: false
     }));
 
@@ -237,7 +237,7 @@ export default async function handler(req, res) {
       }),
       runRealtimeReport({
         dimensions: [{ name: 'eventName' }],
-        metrics: [{ name: 'eventCount' }, { name: 'activeUsers' }],
+        metrics: [{ name: 'eventCount' }],
         limit: '30',
         orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }]
       })
