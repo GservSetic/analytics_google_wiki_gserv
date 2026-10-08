@@ -47,13 +47,13 @@ function buildRealtimeEvents(report) {
   const generic = new Set(['page_view', 'session_start', 'first_visit', 'user_engagement']);
   const allRows = rows(report);
   const items = allRows
-    .filter((item) => item.eventName && !generic.has(item.eventName))
+    .filter((item) => item.eventName && !generic.has(item.eventName) && !['(other)', '(not set)'].includes(item.eventName))
     .slice(0, 10)
     .map((item) => ({
       name: item.eventName,
       label: eventLabel(item.eventName),
       count: item.eventCount || 0,
-      activeUsers: 0,
+      activeUsers: null,
       derived: false
     }));
 
