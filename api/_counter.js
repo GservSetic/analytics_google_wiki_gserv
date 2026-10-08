@@ -125,6 +125,7 @@ function todayKeys(date = new Date()) {
     breakdownUsers: `${prefix}:breakdown_users`,
     breakdownSessions: `${prefix}:breakdown_sessions`,
     pageRank: `${prefix}:pages:rank`,
+    pageTitleMap: `${prefix}:pages:title_url`,
     cityRank: `${prefix}:cities:rank`,
     cityVisitorMap: `${prefix}:cities:visitor_map`,
     sourceRank: `${prefix}:sources:rank`,
@@ -147,6 +148,17 @@ function asNumber(value) {
 
 function safeId(value) {
   return createHash('sha1').update(String(value || '')).digest('hex').slice(0, 20);
+}
+
+function normalizePageTitle(value = '') {
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\|\s*wiki\.?setic\s*$/i, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function pageKeys(dayKeys, event) {
@@ -286,6 +298,14 @@ export async function recordActivity(event) {
     ['EXPIRE', hourData.users, COUNTER_TTL_SECONDS],
     ['EXPIRE', hourData.sessions, COUNTER_TTL_SECONDS]
   ];
+
+  const normalizedTitle = normalizePageTitle(event.title);
+  if (normalizedTitle) {
+    activityCommands.push(
+      ['HSET', dayKeys.pageTitleMap, normalizedTitle, `https://${event.host}${event.path}`],
+      ['EXPIRE', dayKeys.pageTitleMap, COUNTER_TTL_SECONDS]
+    );
+  }
 
   if (!isPageview) {
     activityCommands.push(
@@ -663,6 +683,25 @@ export async function readCounterStats() {
       breakdownCompleteDay
     }
   };
+}
+
+export async function resolveCounterPageUrls(titles = []) {
+  if (!counterConfigured() || !Array.isArray(titles) || !titles.length) return new Map();
+
+  const dayKeys = todayKeys(new Date());
+  const normalized = titles.map((title) => normalizePageTitle(title));
+  const valid = normalized.filter(Boolean);
+  if (!valid.length) return new Map();
+
+  const values = await command(['HMGET', dayKeys.pageTitleMap, ...valid]);
+  const map = new Map();
+
+  valid.forEach((key, index) => {
+    const url = Array.isArray(values) ? values[index] : null;
+    if (url) map.set(key, url);
+  });
+
+  return map;
 }
 
 export async function pingCounter() {
