@@ -685,6 +685,21 @@ export async function readCounterStats() {
   };
 }
 
+export async function readCounterPageIndex() {
+  if (!counterConfigured()) return new Map();
+
+  const dayKeys = todayKeys(new Date());
+  const pages = await readPages(dayKeys);
+  const map = new Map();
+
+  for (const page of pages) {
+    const key = normalizePageTitle(page.label);
+    if (key && page.url) map.set(key, page.url);
+  }
+
+  return map;
+}
+
 export async function resolveCounterPageUrls(titles = []) {
   if (!counterConfigured() || !Array.isArray(titles) || !titles.length) return new Map();
 
