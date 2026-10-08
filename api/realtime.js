@@ -1,5 +1,5 @@
 import { isConfigured, rows, runRealtimeReport, runReport } from './_ga.js';
-import { counterConfigured, resolveCounterPageUrls } from './_counter.js';
+import { counterConfigured, readCounterPageIndex, resolveCounterPageUrls } from './_counter.js';
 
 let realtimeCache = null;
 let realtimeCacheAt = 0;
@@ -253,10 +253,22 @@ export default async function handler(req, res) {
     if (counterConfigured() && activeTitles.length) {
       try {
         const counterUrls = await resolveCounterPageUrls(activeTitles);
+
+        if (counterUrls.size < activeTitles.length) {
+          const counterIndex = await readCounterPageIndex();
+          for (const title of activeTitles) {
+            const key = normalizeTitle(title);
+            if (!counterUrls.has(key) && counterIndex.has(key)) {
+              counterUrls.set(key, counterIndex.get(key));
+            }
+          }
+        }
+
         for (const [key, url] of counterUrls.entries()) {
           pageUrlCache.set(key, { url, views: 0 });
           unresolvedTitleCache.delete(key);
         }
+
         if (counterUrls.size) pageUrlCacheAt = Date.now();
       } catch {
         // O GA4 continua como fallback para resolução de URL.
