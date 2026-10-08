@@ -590,7 +590,11 @@ function renderEvents(list, note) {
         <div class="event-main">
           <div class="event-heading"><span>${escapeHtml(item.label || item.name)}</span><strong>${fmt.format(item.count || 0)}</strong></div>
           <div class="event-bar"><i style="width:${Math.max(3, ((item.count || 0) / max) * 100)}%"></i></div>
-          <small>${item.derived ? 'calculado a partir das visualizações de manuais' : `${fmt.format(item.activeUsers || 0)} usuários`}</small>
+          <small>${item.derived
+            ? 'calculado a partir das visualizações de manuais'
+            : item.activeUsers == null
+              ? 'ocorrências nos últimos 30 min'
+              : `${fmt.format(item.activeUsers || 0)} usuários`}</small>
         </div>
       </div>`).join('');
   }
