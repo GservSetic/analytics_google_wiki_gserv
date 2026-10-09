@@ -230,9 +230,9 @@ function renderCounterFallback(counter = {}) {
   $('metricSessionsLabel').textContent = 'Sessões hoje';
   $('metricViewsLabel').textContent = 'Visualizações hoje';
 
-  $('metricUsersCaption').textContent = 'Aguardando contador Redis · total diário';
-  $('metricSessionsCaption').textContent = 'Aguardando contador Redis · total diário';
-  $('metricViewsCaption').textContent = 'Aguardando contador Redis · total diário';
+  $('metricUsersCaption').textContent = 'Aguardando BigQuery Streaming · total diário';
+  $('metricSessionsCaption').textContent = 'Aguardando BigQuery Streaming · total diário';
+  $('metricViewsCaption').textContent = 'Aguardando BigQuery Streaming · total diário';
   $('metricEngagementCaption').textContent = processedCaption;
   $('metricTimeCaption').textContent = processedCaption;
 
@@ -248,16 +248,16 @@ function renderCounterFallback(counter = {}) {
   const liveViews = live.views || 0;
 
   $('smartSummaryText').textContent =
-    `O total atualizado de hoje está temporariamente indisponível porque o contador Redis atingiu a cota mensal. ` +
+    `O total atualizado de hoje ainda está aguardando a exportação Streaming do GA4 para o BigQuery. ` +
     `No GA4 Realtime, ${fmt.format(liveUsers)} usuários distintos estiveram ativos e ocorreram ${fmt.format(liveViews)} visualizações nos últimos 30 minutos. ` +
     (lastHourLabel
       ? `Como referência apenas, o GA4 intradiário já consolidou dados até aproximadamente ${lastHourLabel}, mas esses valores não representam o total atual do dia.`
       : '');
 
   $('anomalyDetail').textContent =
-    'Os cards diários serão preenchidos novamente pelo Redis quando o contador voltar. O Tempo Real continua válido e independente, usando diretamente o GA4 Realtime.';
+    'Os cards diários serão preenchidos pelo BigQuery assim que a exportação Streaming estiver ativa. O Tempo Real continua válido e independente, usando diretamente o GA4 Realtime.';
 
-  $('syncLabel').textContent = 'GA4 ativo · Redis sem cota';
+  $('syncLabel').textContent = 'GA4 ativo · BigQuery aguardando';
 }
 
 function renderReport(data) {
@@ -333,9 +333,9 @@ function renderCounter(data) {
   $('metricSessionsLabel').textContent = 'Sessões hoje';
   $('metricViewsLabel').textContent = 'Visualizações hoje';
 
-  $('metricUsersCaption').textContent = 'Contador próprio · atualização quase em tempo real';
-  $('metricSessionsCaption').textContent = 'Contador próprio · atualização quase em tempo real';
-  $('metricViewsCaption').textContent = 'Contador próprio · atualização quase em tempo real';
+  $('metricUsersCaption').textContent = 'BigQuery Streaming · atualização quase em tempo real';
+  $('metricSessionsCaption').textContent = 'BigQuery Streaming · atualização quase em tempo real';
+  $('metricViewsCaption').textContent = 'BigQuery Streaming · atualização quase em tempo real';
 
   // Engajamento e tempo médio continuam no GA4: o contador próprio mede acesso,
   // enquanto o GA4 é a fonte correta para métricas comportamentais.
@@ -346,11 +346,11 @@ function renderCounter(data) {
     $(id)?.closest('.metric-card')?.classList.add('counter-live');
   });
 
-  if ($('pagesSourceLabel')) $('pagesSourceLabel').textContent = 'contador próprio · hoje';
+  if ($('pagesSourceLabel')) $('pagesSourceLabel').textContent = 'BigQuery Streaming · hoje';
   if ($('audienceSourceLabel')) $('audienceSourceLabel').textContent = 'usuários únicos hoje';
-  if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = 'acessos: contador · engajamento: GA4';
+  if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = 'acessos: BigQuery · engajamento: GA4';
   if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = 'usuários únicos hoje';
-  if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = 'sessões hoje · contador próprio';
+  if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = 'sessões hoje · BigQuery';
   if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = state.realtime && Array.isArray(state.realtime.events)
     ? 'GA4 Realtime · últimos 30 min'
     : 'GA4 · dados processados';
@@ -369,8 +369,8 @@ function renderCounter(data) {
     (topPage ? ` A página com mais visualizações hoje é ${topPage.label || shortLabel(topPage.name)}, com ${fmt.format(topPage.views || 0)} visualizações.` : '');
 
   $('anomalyDetail').textContent = coverage.completeDay === false
-    ? 'O contador próprio ainda não cobre um dia completo.'
-    : 'Totais e detalhamentos de Hoje vêm do contador próprio; atividade dos últimos 30 minutos vem do GA4 Realtime.';
+    ? 'O BigQuery começou a receber dados após o início do dia; o primeiro dia pode ficar parcial.'
+    : 'Totais e detalhamentos de Hoje vêm do BigQuery Streaming; atividade dos últimos 30 minutos vem do GA4 Realtime.';
 }
 
 function renderSmartSummary(data) {
