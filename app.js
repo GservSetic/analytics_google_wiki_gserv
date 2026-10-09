@@ -43,6 +43,17 @@ function formatDate(raw) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(year, month, day));
 }
 
+function localDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Porto_Velho',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}${map.month}${map.day}`;
+}
+
 function formatSeconds(value) {
   const seconds = Math.max(0, Number(value || 0));
   if (seconds < 60) return `${seconds.toFixed(1).replace('.', ',')}s`;
@@ -704,7 +715,12 @@ function renderTrend(list, granularity = 'day', currentHourLive = false) {
     ? 'Maior concentração de acessos do dia'
     : 'Trecho com maior volume de visualizações';
 
-  const partialIndex = isHourly && currentHourLive ? list.length - 1 : -1;
+  const currentDayIndex = !isHourly && String(list.at(-1)?.date || '') === localDateKey()
+    ? list.length - 1
+    : -1;
+  const partialIndex = isHourly
+    ? (currentHourLive ? list.length - 1 : -1)
+    : currentDayIndex;
   const partialLabel = partialIndex >= 0 ? trendLabel(list[partialIndex], granularity) : null;
   const processedUntil = isHourly && !currentHourLive ? trendLabel(list.at(-1), granularity) : null;
   const firstDate = !isHourly ? trendLabel(list[0], granularity) : null;
@@ -713,7 +729,7 @@ function renderTrend(list, granularity = 'day', currentHourLive = false) {
     ? currentHourLive
       ? `<strong>Como ler:</strong> as barras representam visualizações e a linha azul representa usuários únicos por hora. ${partialLabel ? `<span class="partial-note">${escapeHtml(partialLabel)} está em andamento e ainda pode aumentar.</span>` : ''}`
       : `<strong>Dados processados:</strong> este gráfico mostra somente as horas já consolidadas pelo GA4${processedUntil ? `, até aproximadamente ${escapeHtml(processedUntil)}` : ''}. Para o movimento atual, use o painel Tempo real.`
-    : `<strong>Como ler:</strong> as barras representam visualizações e a linha azul representa usuários. ${firstDate ? `A nova propriedade possui histórico a partir de ${escapeHtml(firstDate)}.` : ''}`;
+    : `<strong>Como ler:</strong> as barras representam visualizações e a linha azul representa usuários. ${firstDate ? `A nova propriedade possui histórico a partir de ${escapeHtml(firstDate)}.` : ''} ${partialLabel ? `<span class="partial-note">${escapeHtml(partialLabel)} é o dia atual e ainda está parcial.</span>` : ''}`;
 
   const width = 760;
   const height = 300;
@@ -748,7 +764,7 @@ function renderTrend(list, granularity = 'day', currentHourLive = false) {
   const labels = list.map((item, index) => {
     if (index % labelEvery !== 0 && index !== list.length - 1) return '';
     const partial = index === partialIndex;
-    return `<text class="trend-x-label ${partial ? 'partial' : ''}" x="${x(index)}" y="${height - 12}" text-anchor="middle">${escapeHtml(trendLabel(item, granularity))}${partial ? ' · agora' : ''}</text>`;
+    return `<text class="trend-x-label ${partial ? 'partial' : ''}" x="${x(index)}" y="${height - 12}" text-anchor="middle">${escapeHtml(trendLabel(item, granularity))}${partial ? (isHourly ? ' · agora' : ' · parcial') : ''}</text>`;
   }).join('');
 
   const verticalGrid = list.map((item, index) => {
