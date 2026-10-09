@@ -120,9 +120,40 @@ function buildPages(report) {
   });
 }
 
-function attachPageEvolution(pages, report) {
+
+function localDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Porto_Velho',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}${map.month}${map.day}`;
+}
+
+function buildCities(report) {
+  const grouped = new Map();
+
+  for (const item of rows(report)) {
+    const name = String(item.city || '').trim() || 'Não informado';
+    grouped.set(name, (grouped.get(name) || 0) + (item.activeUsers || 0));
+  }
+
+  const sorted = [...grouped.entries()]
+    .map(([name, activeUsers]) => ({ name, activeUsers }))
+    .sort((a, b) => b.activeUsers - a.activeUsers);
+
+  const top = sorted.slice(0, 6);
+  const otherUsers = sorted.slice(6).reduce((sum, item) => sum + item.activeUsers, 0);
+  if (otherUsers > 0) top.push({ name: 'Outros', activeUsers: otherUsers });
+  return top;
+}
+
+function attachPageEvolution(pages, report, range) {
   const evolutionRows = rows(report);
   const allDates = [...new Set(evolutionRows.map((item) => item.date).filter(Boolean))].sort();
+  const today = localDateKey();
   const grouped = new Map();
 
   for (const item of evolutionRows) {
@@ -138,15 +169,33 @@ function attachPageEvolution(pages, report) {
   return pages.map((page) => {
     const values = grouped.get(pageKey(page.hostName, page.name)) || new Map();
     const trend = allDates.map((date) => values.get(date) || { date, views: 0, activeUsers: 0 });
-    const size = Math.min(3, Math.max(1, Math.floor(trend.length / 2)));
-    const firstSlice = trend.slice(0, size);
-    const lastSlice = trend.slice(-size);
+
+    // Nunca comparar o dia parcial atual com um dia completo anterior.
+    // A tendência só é calculada quando existem pelo menos dois dias completos.
+    const completed = trend.filter((item) => item.date !== today);
+    const comparable = range !== 'today' && completed.length >= 2;
+
+    if (!comparable) {
+      return {
+        ...page,
+        trend,
+        direction: 'stable',
+        deltaPercent: 0,
+        trendComparable: false
+      };
+    }
+
+    const size = Math.min(3, Math.max(1, Math.floor(completed.length / 2)));
+    const firstSlice = completed.slice(0, size);
+    const lastSlice = completed.slice(-size);
     const firstAverage = firstSlice.reduce((sum, item) => sum + item.views, 0) / Math.max(1, firstSlice.length);
     const lastAverage = lastSlice.reduce((sum, item) => sum + item.views, 0) / Math.max(1, lastSlice.length);
-    const deltaPercent = firstAverage > 0 ? ((lastAverage - firstAverage) / firstAverage) * 100 : (lastAverage > 0 ? 100 : 0);
+    const deltaPercent = firstAverage > 0
+      ? ((lastAverage - firstAverage) / firstAverage) * 100
+      : (lastAverage > 0 ? 100 : 0);
     const direction = deltaPercent > 10 ? 'up' : deltaPercent < -10 ? 'down' : 'stable';
 
-    return { ...page, trend, direction, deltaPercent };
+    return { ...page, trend, direction, deltaPercent, trendComparable: true };
   });
 }
 
@@ -195,7 +244,15 @@ function buildHeatmap(report) {
   });
 
   const maxViews = Math.max(1, ...matrix.flatMap((row) => row.cells.map((cell) => cell.views)));
-  return { period: '30d', maxViews, rows: matrix };
+  const distinctDates = [...new Set(data.map((item) => item.date).filter(Boolean))].sort();
+  return {
+    period: '30d',
+    maxViews,
+    rows: matrix,
+    sampleDays: distinctDates.length,
+    firstDate: distinctDates[0] || null,
+    lastDate: distinctDates.at(-1) || null
+  };
 }
 
 function detectAnomaly(report) {
@@ -394,7 +451,7 @@ export default async function handler(req, res) {
         dateRanges: [dateRange],
         dimensions: [{ name: 'city' }],
         metrics: [{ name: 'activeUsers' }],
-        limit: '8',
+        limit: '50',
         orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }]
       }
     ]);
@@ -460,16 +517,13 @@ export default async function handler(req, res) {
         ? Number(a.hour || 0) - Number(b.hour || 0)
         : String(a.date || '').localeCompare(String(b.date || '')));
 
-    const pages = attachPageEvolution(rawPages, evolutionReport);
+    const pages = attachPageEvolution(rawPages, evolutionReport, range);
     const devices = rows(devicesReport).map((item) => ({
       name: item.deviceCategory,
       activeUsers: item.activeUsers || 0,
       sessions: item.sessions || 0
     }));
-    const cities = rows(citiesReport).map((item) => ({
-      name: item.city,
-      activeUsers: item.activeUsers || 0
-    }));
+    const cities = buildCities(citiesReport);
     const summary = {
       activeUsers: summaryRow.activeUsers || 0,
       sessions: summaryRow.sessions || 0,
