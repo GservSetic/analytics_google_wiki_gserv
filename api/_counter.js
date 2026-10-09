@@ -2,10 +2,8 @@ import { createHash } from 'node:crypto';
 
 const COUNTER_PREFIX = 'wiki:setic:v1';
 const COUNTER_TTL_SECONDS = 60 * 60 * 72;
-const ACTIVE_WINDOW_SECONDS = 30 * 60;
-const ACTIVE_NOW_SECONDS = 5 * 60;
+const EVENT_TTL_SECONDS = 60 * 60 * 24;
 const TIME_ZONE = 'America/Porto_Velho';
-const DEFAULT_HEARTBEAT_SECONDS = 45;
 const DEVICE_NAMES = ['desktop', 'mobile', 'tablet', 'other'];
 
 function redisConfig() {
@@ -56,34 +54,6 @@ async function command(args) {
   return data?.result;
 }
 
-async function pipeline(commands) {
-  if (!commands.length) return [];
-
-  const { url, token } = redisConfig();
-  if (!url || !token) throw new Error('Redis não configurado.');
-
-  const response = await fetch(`${url}/pipeline`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(commands)
-  });
-
-  if (!response.ok) {
-    throw new Error(`Redis pipeline respondeu ${response.status}: ${await response.text()}`);
-  }
-
-  const data = await response.json();
-  if (!Array.isArray(data)) throw new Error('Resposta inválida do Redis.');
-
-  return data.map((item) => {
-    if (item?.error) throw new Error(item.error);
-    return item?.result;
-  });
-}
-
 function localParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: TIME_ZONE,
@@ -120,8 +90,6 @@ function todayKeys(date = new Date()) {
     users: `${prefix}:users`,
     sessions: `${prefix}:sessions`,
     views: `${prefix}:views`,
-    engagementSeconds: `${prefix}:engagement_seconds`,
-    engagedSessions: `${prefix}:engaged_sessions`,
     breakdownUsers: `${prefix}:breakdown_users`,
     breakdownSessions: `${prefix}:breakdown_sessions`,
     pageRank: `${prefix}:pages:rank`,
@@ -133,18 +101,10 @@ function todayKeys(date = new Date()) {
   };
 }
 
-const keys = {
-  activeUsers: `${COUNTER_PREFIX}:active:users`,
-  activeSessions: `${COUNTER_PREFIX}:active:sessions`,
-  viewEvents: `${COUNTER_PREFIX}:active:views`,
+const globalKeys = {
   trackingSince: `${COUNTER_PREFIX}:tracking_since`,
   breakdownTrackingSince: `${COUNTER_PREFIX}:breakdown_tracking_since`
 };
-
-function asNumber(value) {
-  const number = Number(value || 0);
-  return Number.isFinite(number) ? number : 0;
-}
 
 function safeId(value) {
   return createHash('sha1').update(String(value || '')).digest('hex').slice(0, 20);
@@ -161,6 +121,10 @@ function normalizePageTitle(value = '') {
     .trim();
 }
 
+function normalizeDevice(value) {
+  return DEVICE_NAMES.includes(value) ? value : 'other';
+}
+
 function pageKeys(dayKeys, event) {
   const id = safeId(`${event.host}|${event.path}`);
   const prefix = `${dayKeys.prefix}:page:${id}`;
@@ -168,9 +132,7 @@ function pageKeys(dayKeys, event) {
     id,
     meta: `${prefix}:meta`,
     users: `${prefix}:users`,
-    sessions: `${prefix}:sessions`,
-    engagementSeconds: `${prefix}:engagement_seconds`,
-    engagedSessions: `${prefix}:engaged_sessions`
+    sessions: `${prefix}:sessions`
   };
 }
 
@@ -241,22 +203,11 @@ function sourceLabel(value = '') {
     .replace(' / ai-assistant', ' · assistente de IA');
 }
 
-function normalizeDevice(value) {
-  return DEVICE_NAMES.includes(value) ? value : 'other';
-}
-
-function parseHash(value) {
-  if (!value) return {};
-  if (!Array.isArray(value)) return typeof value === 'object' ? value : {};
-  const result = {};
-  for (let i = 0; i < value.length; i += 2) result[value[i]] = value[i + 1];
-  return result;
-}
-
 function labelPage(path = '/', title = '') {
   const cleanTitle = String(title || '')
     .replace(/\s*\|\s*Wiki\.?SETIC\s*$/i, '')
     .trim();
+
   if (cleanTitle) return cleanTitle;
   if (path === '/') return 'Página inicial';
 
@@ -270,416 +221,326 @@ function labelPage(path = '/', title = '') {
     .join(' › ');
 }
 
+const PAGEVIEW_SCRIPT = `
+local eventCreated = redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[1])
+if not eventCreated then
+  return 0
+end
+
+local ttl = ARGV[2]
+local nowIso = ARGV[3]
+local visitorId = ARGV[4]
+local sessionId = ARGV[5]
+local pageId = ARGV[6]
+local host = ARGV[7]
+local path = ARGV[8]
+local title = ARGV[9]
+local city = ARGV[10]
+local source = ARGV[11]
+local normalizedTitle = ARGV[12]
+local pageUrl = ARGV[13]
+
+redis.call('SET', KEYS[2], nowIso, 'NX')
+redis.call('SET', KEYS[3], nowIso, 'NX')
+
+redis.call('SADD', KEYS[4], visitorId)
+redis.call('SADD', KEYS[5], sessionId)
+redis.call('INCR', KEYS[6])
+redis.call('SADD', KEYS[7], visitorId)
+redis.call('SADD', KEYS[8], sessionId)
+
+redis.call('SADD', KEYS[9], visitorId)
+redis.call('SADD', KEYS[10], sessionId)
+redis.call('INCR', KEYS[11])
+
+redis.call('SADD', KEYS[12], visitorId)
+redis.call('SADD', KEYS[13], sessionId)
+redis.call('INCR', KEYS[14])
+
+redis.call('ZINCRBY', KEYS[15], 1, pageId)
+redis.call('HSET', KEYS[16], 'host', host, 'path', path, 'title', title)
+redis.call('SADD', KEYS[17], visitorId)
+redis.call('SADD', KEYS[18], sessionId)
+
+local newCity = redis.call('HSETNX', KEYS[20], visitorId, city)
+if newCity == 1 then
+  redis.call('ZINCRBY', KEYS[19], 1, city)
+  redis.call('SADD', KEYS[21], visitorId)
+end
+
+local newSource = redis.call('HSETNX', KEYS[23], sessionId, source)
+if newSource == 1 then
+  redis.call('ZINCRBY', KEYS[22], 1, source)
+  redis.call('SADD', KEYS[24], visitorId)
+  redis.call('SADD', KEYS[25], sessionId)
+end
+
+if normalizedTitle ~= '' then
+  redis.call('HSET', KEYS[26], normalizedTitle, pageUrl)
+end
+
+for i = 4, 26 do
+  redis.call('EXPIRE', KEYS[i], ttl)
+end
+
+return 1
+`;
+
 export async function recordActivity(event) {
-  const now = Date.now();
-  const score = Math.floor(now / 1000);
-  const currentDate = new Date(now);
-  const dayKeys = todayKeys(currentDate);
-  const hour = localHour(currentDate);
-  const hourData = hourKeys(dayKeys, hour);
-  const pageData = pageKeys(dayKeys, event);
+  if (event.type !== 'pageview') return { ok: true, ignored: true };
+
+  const now = new Date();
+  const dayKeys = todayKeys(now);
+  const hourData = hourKeys(dayKeys, localHour(now));
   const device = normalizeDevice(event.device);
   const deviceData = deviceKeys(dayKeys, device);
-  const isPageview = event.type === 'pageview';
-  const engagementSeconds = Math.max(
-    1,
-    Math.min(60, Number(event.activeSeconds || DEFAULT_HEARTBEAT_SECONDS))
-  );
-
-  const activityCommands = [
-    ['SET', keys.trackingSince, new Date(now).toISOString(), 'NX'],
-    ['ZADD', keys.activeUsers, score, event.visitorId],
-    ['ZADD', keys.activeSessions, score, event.sessionId],
-    ['ZREMRANGEBYSCORE', keys.activeUsers, '-inf', score - ACTIVE_WINDOW_SECONDS - 60],
-    ['ZREMRANGEBYSCORE', keys.activeSessions, '-inf', score - ACTIVE_WINDOW_SECONDS - 60],
-    ['ZREMRANGEBYSCORE', keys.viewEvents, '-inf', score - ACTIVE_WINDOW_SECONDS - 60],
-    ['SADD', hourData.users, event.visitorId],
-    ['SADD', hourData.sessions, event.sessionId],
-    ['EXPIRE', hourData.users, COUNTER_TTL_SECONDS],
-    ['EXPIRE', hourData.sessions, COUNTER_TTL_SECONDS]
-  ];
-
-  const normalizedTitle = normalizePageTitle(event.title);
-  if (normalizedTitle) {
-    activityCommands.push(
-      ['HSET', dayKeys.pageTitleMap, normalizedTitle, `https://${event.host}${event.path}`],
-      ['EXPIRE', dayKeys.pageTitleMap, COUNTER_TTL_SECONDS]
-    );
-  }
-
-  if (!isPageview) {
-    activityCommands.push(
-      ['INCRBY', dayKeys.engagementSeconds, engagementSeconds],
-      ['SADD', dayKeys.engagedSessions, event.sessionId],
-      ['INCRBY', pageData.engagementSeconds, engagementSeconds],
-      ['SADD', pageData.engagedSessions, event.sessionId],
-      ['EXPIRE', dayKeys.engagementSeconds, COUNTER_TTL_SECONDS],
-      ['EXPIRE', dayKeys.engagedSessions, COUNTER_TTL_SECONDS],
-      ['EXPIRE', pageData.engagementSeconds, COUNTER_TTL_SECONDS],
-      ['EXPIRE', pageData.engagedSessions, COUNTER_TTL_SECONDS]
-    );
-
-    await pipeline(activityCommands);
-    return { ok: true, day: dayKeys.day };
-  }
-
-  const eventKey = `${COUNTER_PREFIX}:event:${event.eventId}`;
-  const firstSeen = await command(['SET', eventKey, '1', 'NX', 'EX', 60 * 60 * 24]);
-  if (!firstSeen) {
-    await pipeline(activityCommands);
-    return { ok: true, duplicate: true, day: dayKeys.day };
-  }
-
+  const pageData = pageKeys(dayKeys, event);
   const city = String(event.city || 'Não informado').slice(0, 120);
-  const cityKey = cityUsersKey(dayKeys, city);
   const source = sourceFromEvent(event);
+  const normalizedTitle = normalizePageTitle(event.title);
+  const pageUrl = `https://${event.host}${event.path}`;
 
-  activityCommands.push(
-    ['SET', keys.breakdownTrackingSince, new Date(now).toISOString(), 'NX'],
-    ['SADD', dayKeys.users, event.visitorId],
-    ['SADD', dayKeys.sessions, event.sessionId],
-    ['INCR', dayKeys.views],
-    ['SADD', dayKeys.breakdownUsers, event.visitorId],
-    ['SADD', dayKeys.breakdownSessions, event.sessionId],
-    ['INCR', hourData.views],
-    ['SADD', deviceData.users, event.visitorId],
-    ['SADD', deviceData.sessions, event.sessionId],
-    ['INCR', deviceData.views],
-    ['ZINCRBY', dayKeys.pageRank, 1, pageData.id],
-    ['HSET', pageData.meta, 'host', event.host, 'path', event.path, 'title', event.title || ''],
-    ['SADD', pageData.users, event.visitorId],
-    ['SADD', pageData.sessions, event.sessionId],
-    ['ZINCRBY', dayKeys.cityRank, 1, city],
-    ['ZADD', keys.viewEvents, score, event.eventId],
-
-    ['EXPIRE', dayKeys.users, COUNTER_TTL_SECONDS],
-    ['EXPIRE', dayKeys.sessions, COUNTER_TTL_SECONDS],
-    ['EXPIRE', dayKeys.views, COUNTER_TTL_SECONDS],
-    ['EXPIRE', dayKeys.breakdownUsers, COUNTER_TTL_SECONDS],
-    ['EXPIRE', dayKeys.breakdownSessions, COUNTER_TTL_SECONDS],
-    ['EXPIRE', hourData.views, COUNTER_TTL_SECONDS],
-    ['EXPIRE', deviceData.users, COUNTER_TTL_SECONDS],
-    ['EXPIRE', deviceData.sessions, COUNTER_TTL_SECONDS],
-    ['EXPIRE', deviceData.views, COUNTER_TTL_SECONDS],
-    ['EXPIRE', dayKeys.pageRank, COUNTER_TTL_SECONDS],
-    ['EXPIRE', pageData.meta, COUNTER_TTL_SECONDS],
-    ['EXPIRE', pageData.users, COUNTER_TTL_SECONDS],
-    ['EXPIRE', pageData.sessions, COUNTER_TTL_SECONDS],
-    ['EXPIRE', dayKeys.cityRank, COUNTER_TTL_SECONDS]
-  );
-
-  const [cityWasAssigned, sourceWasAssigned] = await Promise.all([
-    command(['HSETNX', dayKeys.cityVisitorMap, event.visitorId, city]),
-    command(['HSETNX', dayKeys.sourceSessionMap, event.sessionId, source])
+  const result = await command([
+    'EVAL',
+    PAGEVIEW_SCRIPT,
+    '26',
+    `${COUNTER_PREFIX}:event:${event.eventId}`,
+    globalKeys.trackingSince,
+    globalKeys.breakdownTrackingSince,
+    dayKeys.users,
+    dayKeys.sessions,
+    dayKeys.views,
+    dayKeys.breakdownUsers,
+    dayKeys.breakdownSessions,
+    hourData.users,
+    hourData.sessions,
+    hourData.views,
+    deviceData.users,
+    deviceData.sessions,
+    deviceData.views,
+    dayKeys.pageRank,
+    pageData.meta,
+    pageData.users,
+    pageData.sessions,
+    dayKeys.cityRank,
+    dayKeys.cityVisitorMap,
+    cityUsersKey(dayKeys, city),
+    dayKeys.sourceRank,
+    dayKeys.sourceSessionMap,
+    sourceUsersKey(dayKeys, source),
+    sourceSessionsKey(dayKeys, source),
+    dayKeys.pageTitleMap,
+    String(EVENT_TTL_SECONDS),
+    String(COUNTER_TTL_SECONDS),
+    now.toISOString(),
+    event.visitorId,
+    event.sessionId,
+    pageData.id,
+    event.host,
+    event.path,
+    event.title || '',
+    city,
+    source,
+    normalizedTitle,
+    pageUrl
   ]);
 
-  if (cityWasAssigned) {
-    activityCommands.push(
-      ['SADD', cityKey, event.visitorId],
-      ['EXPIRE', cityKey, COUNTER_TTL_SECONDS]
-    );
-  }
-
-  if (sourceWasAssigned) {
-    activityCommands.push(
-      ['ZINCRBY', dayKeys.sourceRank, 1, source],
-      ['SADD', sourceUsersKey(dayKeys, source), event.visitorId],
-      ['SADD', sourceSessionsKey(dayKeys, source), event.sessionId],
-      ['EXPIRE', dayKeys.sourceRank, COUNTER_TTL_SECONDS],
-      ['EXPIRE', sourceUsersKey(dayKeys, source), COUNTER_TTL_SECONDS],
-      ['EXPIRE', sourceSessionsKey(dayKeys, source), COUNTER_TTL_SECONDS]
-    );
-  }
-
-  activityCommands.push(
-    ['EXPIRE', dayKeys.cityVisitorMap, COUNTER_TTL_SECONDS],
-    ['EXPIRE', dayKeys.sourceSessionMap, COUNTER_TTL_SECONDS]
-  );
-
-  await pipeline(activityCommands);
-  return { ok: true, day: dayKeys.day };
+  return {
+    ok: true,
+    duplicate: Number(result || 0) === 0,
+    day: dayKeys.day
+  };
 }
 
-async function readTrend(dayKeys) {
-  const commands = [];
-  for (let hour = 0; hour < 24; hour++) {
-    const hourData = hourKeys(dayKeys, hour);
-    commands.push(
-      ['SCARD', hourData.users],
-      ['SCARD', hourData.sessions],
-      ['GET', hourData.views]
-    );
-  }
+const READ_STATS_SCRIPT = `
+local prefix = ARGV[1]
+local base = ARGV[2]
+local currentHour = tonumber(ARGV[3]) or 0
 
-  const values = await pipeline(commands);
-  const currentHour = localHour(new Date());
-  const trend = [];
+local function number(value)
+  return tonumber(value or '0') or 0
+end
 
-  for (let hour = 0; hour <= currentHour; hour++) {
-    const offset = hour * 3;
-    const activeUsers = asNumber(values[offset]);
-    const sessions = asNumber(values[offset + 1]);
-    const views = asNumber(values[offset + 2]);
+local function hashToObject(values)
+  local obj = {}
+  for i = 1, #values, 2 do
+    obj[values[i]] = values[i + 1]
+  end
+  return obj
+end
 
-    if (activeUsers || sessions || views || hour === currentHour) {
-      trend.push({
-        label: `${String(hour).padStart(2, '0')}:00`,
-        hour: String(hour),
-        activeUsers,
-        sessions,
-        views
-      });
-    }
-  }
-
-  return trend;
+local result = {
+  users = number(redis.call('SCARD', prefix .. ':users')),
+  sessions = number(redis.call('SCARD', prefix .. ':sessions')),
+  views = number(redis.call('GET', prefix .. ':views')),
+  trend = {},
+  devices = {},
+  cities = {},
+  pages = {},
+  sources = {},
+  trackingSince = redis.call('GET', base .. ':tracking_since'),
+  breakdownTrackingSince = redis.call('GET', base .. ':breakdown_tracking_since')
 }
 
-async function readDevices(dayKeys, totalUsers, totalSessions) {
-  const commands = [];
-  DEVICE_NAMES.forEach((device) => {
-    const data = deviceKeys(dayKeys, device);
-    commands.push(
-      ['SCARD', data.users],
-      ['SCARD', data.sessions],
-      ['GET', data.views]
-    );
-  });
+for hour = 0, currentHour do
+  local h = string.format('%02d', hour)
+  local hp = prefix .. ':hour:' .. h
+  local users = number(redis.call('SCARD', hp .. ':users'))
+  local sessions = number(redis.call('SCARD', hp .. ':sessions'))
+  local views = number(redis.call('GET', hp .. ':views'))
 
-  const values = await pipeline(commands);
-  const devices = DEVICE_NAMES.map((name, index) => ({
-    name,
-    activeUsers: asNumber(values[index * 3]),
-    sessions: asNumber(values[index * 3 + 1]),
-    views: asNumber(values[index * 3 + 2])
-  })).filter((item) => item.activeUsers || item.sessions || item.views);
+  if users > 0 or sessions > 0 or views > 0 or hour == currentHour then
+    table.insert(result.trend, {
+      label = h .. ':00',
+      hour = tostring(hour),
+      activeUsers = users,
+      sessions = sessions,
+      views = views
+    })
+  end
+end
 
-  const classifiedUsers = devices.reduce((sum, item) => sum + item.activeUsers, 0);
-  const classifiedSessions = devices.reduce((sum, item) => sum + item.sessions, 0);
-  const missingUsers = Math.max(0, totalUsers - classifiedUsers);
-  const missingSessions = Math.max(0, totalSessions - classifiedSessions);
+local devices = {'desktop', 'mobile', 'tablet', 'other'}
+for _, device in ipairs(devices) do
+  local dp = prefix .. ':device:' .. device
+  local users = number(redis.call('SCARD', dp .. ':users'))
+  local sessions = number(redis.call('SCARD', dp .. ':sessions'))
+  local views = number(redis.call('GET', dp .. ':views'))
 
-  if (missingUsers || missingSessions) {
-    devices.push({
-      name: 'unclassified',
-      activeUsers: missingUsers,
-      sessions: missingSessions,
-      views: 0
-    });
-  }
+  if users > 0 or sessions > 0 or views > 0 then
+    table.insert(result.devices, {
+      name = device,
+      activeUsers = users,
+      sessions = sessions,
+      views = views
+    })
+  end
+end
 
-  return devices.sort((a, b) => b.activeUsers - a.activeUsers);
-}
+local cityNames = redis.call('ZREVRANGE', prefix .. ':cities:rank', 0, -1)
+local cityTop = {}
+local otherCityUsers = 0
+for index, city in ipairs(cityNames) do
+  local id = string.sub(redis.sha1hex(city), 1, 20)
+  local users = number(redis.call('SCARD', prefix .. ':city:' .. id .. ':users'))
+  if index <= 6 then
+    table.insert(cityTop, { name = city, activeUsers = users })
+  else
+    otherCityUsers = otherCityUsers + users
+  end
+end
+if otherCityUsers > 0 then
+  table.insert(cityTop, { name = 'Outros', activeUsers = otherCityUsers })
+end
+result.cities = cityTop
 
-async function readCities(dayKeys, totalUsers) {
-  const ranked = await command(['ZREVRANGE', dayKeys.cityRank, 0, 7]);
-  const cities = Array.isArray(ranked) ? ranked : [];
-  if (!cities.length) {
-    return totalUsers ? [{ name: 'Aguardando classificação', activeUsers: totalUsers }] : [];
-  }
+local pageRows = redis.call('ZREVRANGE', prefix .. ':pages:rank', 0, 14, 'WITHSCORES')
+for i = 1, #pageRows, 2 do
+  local id = pageRows[i]
+  local views = number(pageRows[i + 1])
+  local pp = prefix .. ':page:' .. id
+  local meta = hashToObject(redis.call('HGETALL', pp .. ':meta'))
+  local path = meta.path or '/'
+  local host = meta.host or 'wiki.setic.ro.gov.br'
+  local title = meta.title or ''
+  local users = number(redis.call('SCARD', pp .. ':users'))
+  local sessions = number(redis.call('SCARD', pp .. ':sessions'))
 
-  const counts = await pipeline(cities.map((city) => ['SCARD', cityUsersKey(dayKeys, city)]));
-  const result = cities.map((name, index) => ({
-    name,
-    activeUsers: asNumber(counts[index])
-  })).filter((item) => item.activeUsers > 0);
+  table.insert(result.pages, {
+    id = id,
+    path = path,
+    host = host,
+    title = title,
+    activeUsers = users,
+    sessions = sessions,
+    views = views
+  })
+end
 
-  const shown = result.slice(0, 6);
-  const shownUsers = shown.reduce((sum, item) => sum + item.activeUsers, 0);
-  const remaining = Math.max(0, totalUsers - shownUsers);
-  if (remaining) shown.push({ name: 'Outros / ainda não classificados', activeUsers: remaining });
-  return shown;
-}
+local sourceRows = redis.call('ZREVRANGE', prefix .. ':sources:rank', 0, 9, 'WITHSCORES')
+for i = 1, #sourceRows, 2 do
+  local source = sourceRows[i]
+  local sessions = number(sourceRows[i + 1])
+  local id = string.sub(redis.sha1hex(source), 1, 20)
+  local users = number(redis.call('SCARD', prefix .. ':source:' .. id .. ':users'))
 
+  table.insert(result.sources, {
+    name = source,
+    sessions = sessions,
+    activeUsers = users
+  })
+end
 
-async function readSources(dayKeys, totalSessions) {
-  const ranked = await command(['ZREVRANGE', dayKeys.sourceRank, 0, 9, 'WITHSCORES']);
-  const flat = Array.isArray(ranked) ? ranked : [];
-  const sources = [];
-
-  for (let index = 0; index < flat.length; index += 2) {
-    sources.push({
-      name: flat[index],
-      sessions: asNumber(flat[index + 1])
-    });
-  }
-
-  if (!sources.length) {
-    return totalSessions
-      ? [{ name: '(unclassified)', label: 'Ainda não classificado', sessions: totalSessions, activeUsers: 0 }]
-      : [];
-  }
-
-  const counts = await pipeline(
-    sources.map((item) => ['SCARD', sourceUsersKey(dayKeys, item.name)])
-  );
-
-  const result = sources.map((item, index) => ({
-    ...item,
-    label: sourceLabel(item.name),
-    activeUsers: asNumber(counts[index])
-  }));
-
-  const classifiedSessions = result.reduce((sum, item) => sum + item.sessions, 0);
-  const missingSessions = Math.max(0, totalSessions - classifiedSessions);
-
-  if (missingSessions) {
-    result.push({
-      name: '(unclassified)',
-      label: 'Antes da medição detalhada',
-      sessions: missingSessions,
-      activeUsers: 0
-    });
-  }
-
-  return result;
-}
-
-async function readPages(dayKeys) {
-  const ranked = await command(['ZREVRANGE', dayKeys.pageRank, 0, 14, 'WITHSCORES']);
-  const flat = Array.isArray(ranked) ? ranked : [];
-  const pages = [];
-
-  for (let index = 0; index < flat.length; index += 2) {
-    pages.push({ id: flat[index], views: asNumber(flat[index + 1]) });
-  }
-  if (!pages.length) return [];
-
-  const commands = [];
-  pages.forEach((page) => {
-    const prefix = `${dayKeys.prefix}:page:${page.id}`;
-    commands.push(
-      ['HGETALL', `${prefix}:meta`],
-      ['SCARD', `${prefix}:users`],
-      ['SCARD', `${prefix}:sessions`],
-      ['GET', `${prefix}:engagement_seconds`],
-      ['SCARD', `${prefix}:engaged_sessions`]
-    );
-  });
-
-  const values = await pipeline(commands);
-
-  return pages.map((page, index) => {
-    const offset = index * 5;
-    const meta = parseHash(values[offset]);
-    const activeUsers = asNumber(values[offset + 1]);
-    const sessions = asNumber(values[offset + 2]);
-    const engagementSeconds = asNumber(values[offset + 3]);
-    const engagedSessions = asNumber(values[offset + 4]);
-    const pagePath = meta.path || '/';
-    const hostName = meta.host || 'wiki.setic.ro.gov.br';
-
-    return {
-      name: pagePath,
-      label: labelPage(pagePath, meta.title),
-      url: `https://${hostName}${pagePath}`,
-      hostName,
-      activeUsers,
-      sessions,
-      views: page.views,
-      avgEngagementSeconds: activeUsers > 0 ? engagementSeconds / activeUsers : 0,
-      engagementRate: sessions > 0 ? Math.min(1, engagedSessions / sessions) : 0,
-      trend: [],
-      direction: 'stable',
-      deltaPercent: 0
-    };
-  });
-}
+return cjson.encode(result)
+`;
 
 export async function readCounterStats() {
-  const now = Date.now();
-  const score = Math.floor(now / 1000);
-  const dayKeys = todayKeys(new Date(now));
-
-  const [
-    users,
-    sessions,
-    views,
-    breakdownUsers,
-    breakdownSessions,
-    engagementSeconds,
-    engagedSessions,
-    activeUsers30m,
-    activeUsersNow,
-    sessions30m,
-    views30m,
-    trackingSince,
-    breakdownTrackingSince
-  ] = await pipeline([
-    ['SCARD', dayKeys.users],
-    ['SCARD', dayKeys.sessions],
-    ['GET', dayKeys.views],
-    ['SCARD', dayKeys.breakdownUsers],
-    ['SCARD', dayKeys.breakdownSessions],
-    ['GET', dayKeys.engagementSeconds],
-    ['SCARD', dayKeys.engagedSessions],
-    ['ZCOUNT', keys.activeUsers, score - ACTIVE_WINDOW_SECONDS, '+inf'],
-    ['ZCOUNT', keys.activeUsers, score - ACTIVE_NOW_SECONDS, '+inf'],
-    ['ZCOUNT', keys.activeSessions, score - ACTIVE_WINDOW_SECONDS, '+inf'],
-    ['ZCOUNT', keys.viewEvents, score - ACTIVE_WINDOW_SECONDS, '+inf'],
-    ['GET', keys.trackingSince],
-    ['GET', keys.breakdownTrackingSince]
+  const now = new Date();
+  const dayKeys = todayKeys(now);
+  const raw = await command([
+    'EVAL',
+    READ_STATS_SCRIPT,
+    '0',
+    dayKeys.prefix,
+    COUNTER_PREFIX,
+    String(localHour(now))
   ]);
 
-  const totalUsers = asNumber(users);
-  const totalSessions = asNumber(sessions);
-  const totalViews = asNumber(views);
-  const detailedUsers = asNumber(breakdownUsers);
-  const detailedSessions = asNumber(breakdownSessions);
-  const totalEngagementSeconds = asNumber(engagementSeconds);
-  const totalEngagedSessions = asNumber(engagedSessions);
+  const stats = typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
+  const trackingDate = stats.trackingSince ? new Date(stats.trackingSince) : null;
+  const breakdownDate = stats.breakdownTrackingSince ? new Date(stats.breakdownTrackingSince) : null;
 
-  const [trend, devices, cities, pages, sources] = await Promise.all([
-    readTrend(dayKeys),
-    readDevices(dayKeys, totalUsers, totalSessions),
-    readCities(dayKeys, totalUsers),
-    readPages(dayKeys),
-    readSources(dayKeys, totalSessions)
-  ]);
-
-  const trackingDate = trackingSince ? new Date(trackingSince) : null;
-  const breakdownDate = breakdownTrackingSince ? new Date(breakdownTrackingSince) : null;
   const completeDay = Boolean(
     trackingDate &&
     !Number.isNaN(trackingDate.getTime()) &&
     localDateKey(trackingDate) < dayKeys.day
   );
+
   const breakdownCompleteDay = Boolean(
     breakdownDate &&
     !Number.isNaN(breakdownDate.getTime()) &&
     localDateKey(breakdownDate) < dayKeys.day
   );
 
+  const pages = (stats.pages || []).map((page) => ({
+    name: page.path || '/',
+    label: labelPage(page.path || '/', page.title || ''),
+    url: `https://${page.host || 'wiki.setic.ro.gov.br'}${page.path || '/'}`,
+    hostName: page.host || 'wiki.setic.ro.gov.br',
+    activeUsers: Number(page.activeUsers || 0),
+    sessions: Number(page.sessions || 0),
+    views: Number(page.views || 0),
+    trend: [],
+    direction: 'stable',
+    deltaPercent: 0,
+    trendComparable: false
+  }));
+
+  const sources = (stats.sources || []).map((item) => ({
+    name: item.name,
+    label: sourceLabel(item.name),
+    sessions: Number(item.sessions || 0),
+    activeUsers: Number(item.activeUsers || 0)
+  }));
+
   return {
-    generatedAt: new Date(now).toISOString(),
+    generatedAt: new Date().toISOString(),
     timeZone: TIME_ZONE,
     today: {
       date: dayKeys.day,
-      users: totalUsers,
-      sessions: totalSessions,
-      views: totalViews,
-      engagementRate: detailedSessions > 0 ? Math.min(1, totalEngagedSessions / detailedSessions) : 0,
-      avgEngagementSeconds: detailedSessions > 0 ? totalEngagementSeconds / detailedSessions : 0,
-      detailedUsers,
-      detailedSessions
+      users: Number(stats.users || 0),
+      sessions: Number(stats.sessions || 0),
+      views: Number(stats.views || 0)
     },
-    realtime: {
-      activeUsersNow: asNumber(activeUsersNow),
-      activeUsers30m: asNumber(activeUsers30m),
-      sessions30m: asNumber(sessions30m),
-      views30m: asNumber(views30m),
-      windowMinutes: 30,
-      activeNowMinutes: 5
-    },
-    trend,
+    trend: stats.trend || [],
     pages,
-    devices,
-    cities,
+    devices: stats.devices || [],
+    cities: stats.cities || [],
     sources,
     coverage: {
-      trackingSince: trackingSince || null,
+      trackingSince: stats.trackingSince || null,
       completeDay,
-      breakdownTrackingSince: breakdownTrackingSince || null,
+      breakdownTrackingSince: stats.breakdownTrackingSince || null,
       breakdownCompleteDay
     }
   };
@@ -688,11 +549,10 @@ export async function readCounterStats() {
 export async function readCounterPageIndex() {
   if (!counterConfigured()) return new Map();
 
-  const dayKeys = todayKeys(new Date());
-  const pages = await readPages(dayKeys);
+  const stats = await readCounterStats();
   const map = new Map();
 
-  for (const page of pages) {
+  for (const page of stats.pages || []) {
     const key = normalizePageTitle(page.label);
     if (key && page.url) map.set(key, page.url);
   }
@@ -704,8 +564,7 @@ export async function resolveCounterPageUrls(titles = []) {
   if (!counterConfigured() || !Array.isArray(titles) || !titles.length) return new Map();
 
   const dayKeys = todayKeys(new Date());
-  const normalized = titles.map((title) => normalizePageTitle(title));
-  const valid = normalized.filter(Boolean);
+  const valid = titles.map((title) => normalizePageTitle(title)).filter(Boolean);
   if (!valid.length) return new Map();
 
   const values = await command(['HMGET', dayKeys.pageTitleMap, ...valid]);
