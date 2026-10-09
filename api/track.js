@@ -60,6 +60,12 @@ export default async function handler(req, res) {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const type = body.type === 'heartbeat' ? 'heartbeat' : body.type === 'pageview' ? 'pageview' : null;
 
+    // Versões antigas do tracker ainda podem enviar heartbeat em abas já abertas.
+    // O tempo real agora é responsabilidade do GA4, portanto heartbeats não usam Redis.
+    if (type === 'heartbeat') {
+      return res.status(202).json({ ok: true, ignored: true, source: 'ga4-realtime' });
+    }
+
     if (
       !type ||
       !ID_RE.test(String(body.eventId || '')) ||
@@ -91,6 +97,14 @@ export default async function handler(req, res) {
 
     return res.status(202).json(result);
   } catch (error) {
+    const quotaExceeded = /max requests limit exceeded/i.test(String(error?.message || ''));
+    if (quotaExceeded) {
+      res.setHeader('Retry-After', '3600');
+      return res.status(429).json({
+        error: 'Contador próprio temporariamente em pausa por limite de operações.',
+        detail: error.message
+      });
+    }
     return res.status(502).json({ error: 'Falha ao registrar atividade.', detail: error.message });
   }
 }
