@@ -75,7 +75,7 @@ async function getFederatedToken() {
   return data.access_token;
 }
 
-async function accessToken() {
+export async function googleAccessToken() {
   if (cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 60_000) {
     return cachedAccessToken;
   }
@@ -92,7 +92,7 @@ async function accessToken() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        scope: [ANALYTICS_SCOPE],
+        scope: [ANALYTICS_SCOPE, CLOUD_SCOPE],
         lifetime: '3600s',
       }),
     },
@@ -111,7 +111,7 @@ async function accessToken() {
 }
 
 async function gaRequest(method, body) {
-  const token = await accessToken();
+  const token = await googleAccessToken();
 
   const response = await fetch(
     `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId()}:${method}`,
