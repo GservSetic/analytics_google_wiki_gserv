@@ -211,40 +211,109 @@ function renderCounterFallback(counter = {}) {
   if (state.range !== 'today' || !state.report) return;
 
   const summary = state.report.summary || {};
+  const live = state.realtime?.summary || {};
   const lastHour = state.report.trend?.at(-1);
   const lastHourLabel = lastHour ? trendLabel(lastHour, 'hour') : null;
+  const hasRealtime = Boolean(state.realtime?.summary);
 
-  $('metricUsersLabel').textContent = 'Usuários processados hoje';
-  $('metricSessionsLabel').textContent = 'Sessões processadas hoje';
-  $('metricViewsLabel').textContent = 'Visualizações processadas hoje';
+  if (hasRealtime) {
+    animateNumber($('metricUsers'), live.activeUsers || 0);
+    animateNumber($('metricViews'), live.views || 0);
+    $('metricSessions').textContent = '—';
+    delete $('metricSessions').dataset.value;
 
-  const processedCaption = lastHourLabel
-    ? `GA4 · processado até aproximadamente ${lastHourLabel}`
+    $('metricUsersLabel').textContent = 'Usuários · últimos 30 min';
+    $('metricSessionsLabel').textContent = 'Sessões do dia';
+    $('metricViewsLabel').textContent = 'Visualizações · últimos 30 min';
+
+    $('metricUsersCaption').textContent = 'GA4 Realtime · janela móvel de 30 minutos';
+    $('metricSessionsCaption').textContent = 'Indisponível em tempo real enquanto o contador diário está pausado';
+    $('metricViewsCaption').textContent = 'GA4 Realtime · janela móvel de 30 minutos';
+  } else {
+    animateNumber($('metricUsers'), summary.activeUsers || 0);
+    animateNumber($('metricSessions'), summary.sessions || 0);
+    animateNumber($('metricViews'), summary.views || 0);
+
+    $('metricUsersLabel').textContent = 'Usuários processados hoje';
+    $('metricSessionsLabel').textContent = 'Sessões processadas hoje';
+    $('metricViewsLabel').textContent = 'Visualizações processadas hoje';
+
+    const processedCaption = lastHourLabel
+      ? `GA4 · processado até aproximadamente ${lastHourLabel}`
+      : 'GA4 · processamento intradiário em andamento';
+
+    $('metricUsersCaption').textContent = processedCaption;
+    $('metricSessionsCaption').textContent = processedCaption;
+    $('metricViewsCaption').textContent = processedCaption;
+  }
+
+  $('metricEngagementCaption').textContent = lastHourLabel
+    ? `GA4 · dados processados até aproximadamente ${lastHourLabel}`
+    : 'GA4 · processamento intradiário em andamento';
+  $('metricTimeCaption').textContent = lastHourLabel
+    ? `GA4 · dados processados até aproximadamente ${lastHourLabel}`
     : 'GA4 · processamento intradiário em andamento';
 
-  $('metricUsersCaption').textContent = processedCaption;
-  $('metricSessionsCaption').textContent = processedCaption;
-  $('metricViewsCaption').textContent = processedCaption;
-  $('metricEngagementCaption').textContent = 'GA4 · processamento intradiário em andamento';
-  $('metricTimeCaption').textContent = 'GA4 · processamento intradiário em andamento';
-
-  if ($('pagesSourceLabel')) $('pagesSourceLabel').textContent = 'GA4 · dados já processados';
-  if ($('audienceSourceLabel')) $('audienceSourceLabel').textContent = 'GA4 · dados já processados';
-  if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = 'GA4 · dados já processados';
-  if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = 'GA4 · dados já processados';
-  if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = 'GA4 · dados já processados';
+  if ($('pagesSourceLabel')) {
+    $('pagesSourceLabel').textContent = hasRealtime
+      ? 'GA4 Realtime · últimos 30 min'
+      : 'GA4 · dados já processados';
+  }
+  if ($('audienceSourceLabel')) {
+    $('audienceSourceLabel').textContent = lastHourLabel
+      ? `GA4 · processado até ~${lastHourLabel}`
+      : 'GA4 · dados já processados';
+  }
+  if ($('engagementSourceLabel')) {
+    $('engagementSourceLabel').textContent = lastHourLabel
+      ? `GA4 · processado até ~${lastHourLabel}`
+      : 'GA4 · dados já processados';
+  }
+  if ($('citiesSourceLabel')) {
+    $('citiesSourceLabel').textContent = lastHourLabel
+      ? `GA4 · processado até ~${lastHourLabel}`
+      : 'GA4 · dados já processados';
+  }
+  if ($('sourcesSourceLabel')) {
+    $('sourcesSourceLabel').textContent = lastHourLabel
+      ? `GA4 · processado até ~${lastHourLabel}`
+      : 'GA4 · dados já processados';
+  }
 
   renderTrend(state.report.trend || [], 'hour', false);
 
-  const liveUsers = state.realtime?.summary?.activeUsers || 0;
-  const liveViews = state.realtime?.summary?.views || 0;
-  $('smartSummaryText').textContent =
-    `O GA4 já processou ${fmt.format(summary.activeUsers || 0)} usuários, ${fmt.format(summary.sessions || 0)} sessões e ${fmt.format(summary.views || 0)} visualizações de hoje. ` +
-    `No tempo real, ${fmt.format(liveUsers)} usuários estiveram ativos e ocorreram ${fmt.format(liveViews)} visualizações nos últimos 30 minutos.`;
+  if (hasRealtime && Array.isArray(state.realtime.pages)) {
+    const livePages = state.realtime.pages.map((item) => {
+      const parts = pagePartsFromUrl(item.url, shortLabel(item.name));
+      return {
+        name: parts?.path || item.url || item.name,
+        label: shortLabel(item.name),
+        url: item.url || '',
+        hostName: parts?.host || 'wiki.setic.ro.gov.br',
+        activeUsers: item.activeUsers || 0,
+        views: item.views || 0,
+        trend: [],
+        direction: 'stable',
+        deltaPercent: 0,
+        trendComparable: false
+      };
+    });
+    renderPages(livePages);
+  }
+
+  const liveUsers = live.activeUsers || 0;
+  const liveViews = live.views || 0;
+  const processedText = lastHourLabel
+    ? `O relatório diário do GA4 está consolidado até aproximadamente ${lastHourLabel}: ${fmt.format(summary.activeUsers || 0)} usuários, ${fmt.format(summary.sessions || 0)} sessões e ${fmt.format(summary.views || 0)} visualizações.`
+    : 'O relatório diário do GA4 ainda está em processamento.';
+
+  $('smartSummaryText').textContent = hasRealtime
+    ? `Agora, o GA4 Realtime registra ${fmt.format(liveUsers)} usuários e ${fmt.format(liveViews)} visualizações nos últimos 30 minutos. ${processedText}`
+    : processedText;
+
   $('anomalyDetail').textContent =
-    counter?.degraded
-      ? 'Contador próprio temporariamente indisponível por limite do Redis. Os totais de Hoje mostram apenas a parte já processada pelo GA4; o painel Tempo real continua atualizado.'
-      : 'Os totais de Hoje usam o processamento intradiário do GA4.';
+    'O contador próprio diário está temporariamente pausado pelo limite do Redis. Por isso, o painel separa explicitamente Realtime (30 min) de dados diários processados; esses valores não representam o mesmo período.';
+
   $('syncLabel').textContent = 'GA4 ativo · contador em pausa';
 }
 
@@ -728,7 +797,9 @@ function renderTrend(list, granularity = 'day', currentHourLive = false) {
   const isHourly = granularity === 'hour';
   const mode = state.trendMode || 'both';
 
-  $('trendTitle').textContent = isHourly ? 'Movimento de acessos ao longo do dia' : 'Evolução dos acessos no período';
+  $('trendTitle').textContent = isHourly
+    ? (currentHourLive ? 'Movimento de acessos ao longo do dia' : 'Horas já processadas de hoje')
+    : 'Evolução dos acessos no período';
   $('trendSubtitle').textContent = isHourly
     ? (currentHourLive
         ? 'Movimento de hoje por hora, atualizado pelo contador próprio.'
