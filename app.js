@@ -251,7 +251,7 @@ function renderReport(data) {
   renderEvents(data.events || [], data.eventInstrumentationNote);
   renderPages(data.pages || []);
   renderEngagement(data.pages || []);
-  renderDevices(data.devices || []);
+  renderDevices(data.devices || [], summary.activeUsers || 0);
   renderCities(data.cities || []);
 
   if (state.counter?.enabled && state.range === 'today') {
@@ -305,8 +305,8 @@ function renderCounter(data) {
 
   renderTrend(data.trend || [], 'hour', true);
   renderPages(data.pages || []);
-  renderEngagement(data.pages || []);
-  renderDevices(data.devices || []);
+  // O detalhamento de engajamento permanece com o GA4 já renderizado em renderReport().
+  renderDevices(data.devices || [], today.users || 0);
   renderCities(data.cities || []);
   renderSources(data.sources || []);
 
@@ -629,31 +629,41 @@ function renderEvents(list, note) {
   noteElement.textContent = note || '';
 }
 
-function renderDevices(list) {
+function renderDevices(list, audienceTotal = null) {
   const colors = ['#2788f5', '#113f6d', '#8aa4be', '#17a66a'];
-  const total = list.reduce((sum, item) => sum + (item.activeUsers || 0), 0) || 1;
-  animateNumber($('deviceTotal'), total);
+  const distributionTotal = list.reduce((sum, item) => sum + (item.activeUsers || 0), 0) || 1;
+  const headlineTotal = Number.isFinite(Number(audienceTotal)) && Number(audienceTotal) > 0
+    ? Number(audienceTotal)
+    : distributionTotal;
+
+  // O número central representa a audiência da mesma fonte dos cards principais.
+  // As fatias são normalizadas pela distribuição por dispositivo para sempre somarem 100%.
+  animateNumber($('deviceTotal'), headlineTotal);
 
   let cursor = 0;
   const segments = list.map((item, index) => {
-    const share = (item.activeUsers || 0) / total * 100;
+    const share = (item.activeUsers || 0) / distributionTotal * 100;
     const start = cursor;
     cursor += share;
     return `${colors[index % colors.length]} ${start}% ${cursor}%`;
   });
-  $('deviceDonut').style.background = `conic-gradient(${segments.join(',')})`;
+  $('deviceDonut').style.background = list.length
+    ? `conic-gradient(${segments.join(',')})`
+    : 'conic-gradient(#dce6f0 0 100%)';
 
   const label = { desktop: 'Desktop', mobile: 'Mobile', tablet: 'Tablet', other: 'Outro', unclassified: 'Ainda não classificado' };
-  $('deviceList').innerHTML = list.map((item, index) => `
-    <div class="device-item">
-      <i style="background:${colors[index % colors.length]}"></i>
-      <span>${escapeHtml(label[item.name] || item.name)}</span>
-      <strong>${pct.format((item.activeUsers || 0) / total)}</strong>
-    </div>`).join('');
+  $('deviceList').innerHTML = list.length
+    ? list.map((item, index) => `
+        <div class="device-item">
+          <i style="background:${colors[index % colors.length]}"></i>
+          <span>${escapeHtml(label[item.name] || item.name)}</span>
+          <strong>${pct.format((item.activeUsers || 0) / distributionTotal)}</strong>
+        </div>`).join('')
+    : '<span class="muted">Nenhum dispositivo identificado no período.</span>';
 }
 
 function renderCities(list) {
-  $('cityList').innerHTML = list.slice(0, 6).map((item) => `
+  $('cityList').innerHTML = list.slice(0, 7).map((item) => `
     <div class="city-item">
       <span class="city-name">${escapeHtml(item.name || 'Não informado')}</span>
       <strong class="city-value">${fmt.format(item.activeUsers || 0)}</strong>
