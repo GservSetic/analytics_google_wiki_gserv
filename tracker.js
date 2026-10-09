@@ -6,7 +6,8 @@
   const VISITOR_KEY = 'setic_wiki_visitor_v1';
   const SESSION_KEY = 'setic_wiki_session_v1';
   const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
-  const HEARTBEAT_MS = 30 * 1000;
+  const RETRY_MS = 60 * 1000;
+  const QUOTA_BACKOFF_MS = 60 * 60 * 1000;
   const BOT_RE = /bot|crawler|spider|slurp|headless|lighthouse|pagespeed|googlebot|bingbot/i;
 
   if (!ALLOWED_HOSTS.has(location.hostname)) return;
@@ -55,10 +56,10 @@
     return session;
   }
 
-  function payload(type, extra = {}) {
+  function pageviewPayload() {
     const session = getSession();
     return {
-      type,
+      type: 'pageview',
       eventId: uuid(),
       visitorId: getVisitorId(),
       sessionId: session.id,
@@ -67,12 +68,19 @@
       title: (document.title || '').slice(0, 240),
       referrer: (session.referrer || '').slice(0, 600),
       entryUrl: (session.entryUrl || location.href).slice(0, 900),
-      sentAt: new Date().toISOString(),
-      ...extra
+      sentAt: new Date().toISOString()
     };
   }
 
-  async function sendPayload(data) {
+  let pendingPageview = null;
+  let lastTrackedPath = '';
+  let routeTimer = null;
+  let retryTimer = null;
+  let pausedUntil = 0;
+
+  async function sendPendingPageview() {
+    if (!pendingPageview || Date.now() < pausedUntil) return false;
+
     try {
       const response = await fetch(ENDPOINT, {
         method: 'POST',
@@ -80,62 +88,41 @@
         credentials: 'omit',
         keepalive: true,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(pendingPageview)
       });
-      return response.ok;
-    } catch {
-      return false;
-    }
-  }
 
-  let pendingPageview = null;
-  let lastTrackedPath = '';
-  let routeTimer = null;
-  let lastHeartbeatAt = Date.now();
+      if (response.ok) {
+        pendingPageview = null;
+        clearTimeout(retryTimer);
+        return true;
+      }
 
-  async function sendPendingPageview() {
-    if (!pendingPageview) return true;
-    const sent = await sendPayload(pendingPageview);
-    if (sent) pendingPageview = null;
-    return sent;
-  }
+      if (response.status === 429) {
+        const retryAfter = Number(response.headers.get('Retry-After') || 3600);
+        pausedUntil = Date.now() + Math.max(300, retryAfter) * 1000;
+      }
+    } catch {}
 
-  function activeSecondsSinceLastHeartbeat() {
-    const now = Date.now();
-    const elapsed = Math.max(1, Math.round((now - lastHeartbeatAt) / 1000));
-    lastHeartbeatAt = now;
-    return Math.min(60, elapsed);
-  }
-
-  function sendHeartbeat() {
-    if (pendingPageview) return sendPendingPageview();
-    return sendPayload(payload('heartbeat', {
-      activeSeconds: activeSecondsSinceLastHeartbeat()
-    }));
-  }
-
-  function flushVisibleTime() {
-    const elapsed = Math.round((Date.now() - lastHeartbeatAt) / 1000);
-    if (elapsed < 3) return;
-    sendHeartbeat();
+    clearTimeout(retryTimer);
+    const delay = Math.max(RETRY_MS, pausedUntil - Date.now());
+    retryTimer = setTimeout(sendPendingPageview, delay);
+    return false;
   }
 
   function trackPage(force = false) {
     const path = location.pathname || '/';
     if (!force && path === lastTrackedPath) return;
     lastTrackedPath = path;
-    lastHeartbeatAt = Date.now();
     clearTimeout(routeTimer);
 
     routeTimer = setTimeout(() => {
-      pendingPageview = payload('pageview');
+      pendingPageview = pageviewPayload();
       sendPendingPageview();
     }, 180);
   }
 
   const originalPushState = history.pushState;
   history.pushState = function (...args) {
-    flushVisibleTime();
     const result = originalPushState.apply(this, args);
     setTimeout(() => trackPage(), 0);
     return result;
@@ -143,19 +130,14 @@
 
   const originalReplaceState = history.replaceState;
   history.replaceState = function (...args) {
-    flushVisibleTime();
     const result = originalReplaceState.apply(this, args);
     setTimeout(() => trackPage(), 0);
     return result;
   };
 
-  addEventListener('popstate', () => {
-    flushVisibleTime();
-    trackPage();
-  });
+  addEventListener('popstate', () => trackPage());
 
   addEventListener('pageshow', (event) => {
-    lastHeartbeatAt = Date.now();
     if (event.persisted) trackPage(true);
   });
 
@@ -170,25 +152,9 @@
   const titleNode = document.querySelector('title');
   if (titleNode) titleObserver.observe(titleNode, { childList: true, subtree: true });
 
-  setInterval(() => {
-    if (document.visibilityState !== 'visible') return;
-    if (pendingPageview) {
-      sendPendingPageview();
-      return;
-    }
-    sendHeartbeat();
-  }, HEARTBEAT_MS);
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      flushVisibleTime();
-    } else {
-      lastHeartbeatAt = Date.now();
-      if (pendingPageview) sendPendingPageview();
-    }
+  addEventListener('online', () => {
+    if (pendingPageview) sendPendingPageview();
   });
-
-  addEventListener('pagehide', () => flushVisibleTime());
 
   trackPage(true);
 })();
