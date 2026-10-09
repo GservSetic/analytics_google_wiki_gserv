@@ -5,6 +5,8 @@ const COUNTER_TTL_SECONDS = 60 * 60 * 72;
 const EVENT_TTL_SECONDS = 60 * 60 * 24;
 const TIME_ZONE = 'America/Porto_Velho';
 const DEVICE_NAMES = ['desktop', 'mobile', 'tablet', 'other'];
+const REDIS_BACKOFF_MS = 15 * 60_000;
+let redisBlockedUntil = 0;
 
 function redisConfig() {
   const url =
@@ -36,6 +38,10 @@ async function command(args) {
   const { url, token } = redisConfig();
   if (!url || !token) throw new Error('Redis não configurado.');
 
+  if (Date.now() < redisBlockedUntil) {
+    throw new Error('Redis em pausa temporária após atingir o limite de operações.');
+  }
+
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -46,11 +52,20 @@ async function command(args) {
   });
 
   if (!response.ok) {
-    throw new Error(`Redis respondeu ${response.status}: ${await response.text()}`);
+    const detail = await response.text();
+    if (/max requests limit exceeded/i.test(detail)) {
+      redisBlockedUntil = Date.now() + REDIS_BACKOFF_MS;
+    }
+    throw new Error(`Redis respondeu ${response.status}: ${detail}`);
   }
 
   const data = await response.json();
-  if (data?.error) throw new Error(data.error);
+  if (data?.error) {
+    if (/max requests limit exceeded/i.test(String(data.error))) {
+      redisBlockedUntil = Date.now() + REDIS_BACKOFF_MS;
+    }
+    throw new Error(data.error);
+  }
   return data?.result;
 }
 
