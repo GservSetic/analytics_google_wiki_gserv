@@ -1,9 +1,9 @@
-import { counterConfigured, readCounterStats } from './_counter.js';
+import { bigQueryConfigured, readBigQueryToday } from './_bigquery.js';
 
 let cache = null;
 let cacheAt = 0;
 const OK_CACHE_MS = 55_000;
-const DEGRADED_CACHE_MS = 5 * 60_000;
+const DEGRADED_CACHE_MS = 2 * 60_000;
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
@@ -19,21 +19,22 @@ export default async function handler(req, res) {
     return res.status(200).json({ ...cache, cache: 'memory' });
   }
 
-  if (!counterConfigured()) {
+  if (!bigQueryConfigured()) {
     cache = {
       enabled: false,
       source: 'ga4',
-      message: 'Contador próprio aguardando conexão Redis.'
+      degraded: true,
+      message: 'BigQuery ainda não configurado para o total diário.'
     };
     cacheAt = now;
     return res.status(200).json(cache);
   }
 
   try {
-    const stats = await readCounterStats();
+    const stats = await readBigQueryToday();
     cache = {
       enabled: true,
-      source: 'wiki-counter',
+      source: 'bigquery',
       ...stats
     };
     cacheAt = now;
@@ -43,7 +44,7 @@ export default async function handler(req, res) {
       enabled: false,
       source: 'ga4',
       degraded: true,
-      message: 'Contador próprio temporariamente indisponível.',
+      message: 'BigQuery ainda não está disponível para o total diário.',
       detail: error.message
     };
     cacheAt = now;
