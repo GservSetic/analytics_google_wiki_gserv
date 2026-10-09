@@ -493,7 +493,7 @@ function renderPages(list) {
       </div>
       <div class="page-evolution">
         ${sparklineSvg(item.trend)}
-        ${trendChip(item)}
+        ${item.trendComparable ? trendChip(item) : '<span class="sparkline-empty">sem comparação completa</span>'}
       </div>
       <strong class="rank-value">${fmt.format(item.views || 0)}</strong>
     </div>`).join('');
@@ -560,8 +560,15 @@ function renderHeatmap(data) {
   }).join('');
 
   grid.innerHTML = header + cells;
+
+  const sampleDays = Number(data.sampleDays || 0);
+  const firstDate = data.firstDate ? formatDate(data.firstDate) : null;
+  const historyNote = sampleDays > 0 && sampleDays < 7
+    ? ` <span class="muted">Histórico inicial: ${sampleDays} dia(s)${firstDate ? `, desde ${firstDate}` : ''}. O padrão ficará mais representativo com mais dias de coleta.</span>`
+    : '';
+
   $('heatmapInsight').innerHTML = hottest.views >= 0
-    ? `<strong>Maior concentração:</strong> ${hottest.day}, por volta de ${String(hottest.hour).padStart(2, '0')}h, com média de ${fmt.format(hottest.views)} visualizações.`
+    ? `<strong>Maior concentração observada:</strong> ${hottest.day}, por volta de ${String(hottest.hour).padStart(2, '0')}h, com média de ${fmt.format(hottest.views)} visualizações.${historyNote}`
     : 'Ainda não há um horário predominante.';
 }
 
