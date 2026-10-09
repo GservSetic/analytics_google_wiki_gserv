@@ -97,6 +97,45 @@ function updateTimestamp(iso) {
   $('lastUpdate').textContent = `atualizado às ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
 }
 
+function updateSyncStatus() {
+  if (state.counter?.degraded) {
+    $('syncLabel').textContent = 'GA4 ativo · contador em pausa';
+    return;
+  }
+
+  if (state.realtime?.stale) {
+    $('syncLabel').textContent = 'Tempo real em cache';
+    return;
+  }
+
+  if (state.report?.stale) {
+    $('syncLabel').textContent = 'Dados em cache';
+    return;
+  }
+
+  $('syncLabel').textContent = 'Sincronizado';
+}
+
+function reconcileTodaySources() {
+  if (state.range !== 'today') {
+    updateSyncStatus();
+    return;
+  }
+
+  if (state.counter?.enabled) {
+    renderCounter(state.counter);
+  } else if (state.counter?.degraded) {
+    renderCounterFallback(state.counter);
+  }
+
+  if (state.realtime && Array.isArray(state.realtime.events)) {
+    renderEvents(state.realtime.events, state.realtime.eventInstrumentationNote);
+    if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = 'GA4 Realtime · últimos 30 min';
+  }
+
+  updateSyncStatus();
+}
+
 async function getJson(url) {
   if (location.protocol === 'file:' && window.DEMO_DATA) {
     if (url.startsWith('/api/realtime')) return structuredClone(window.DEMO_DATA.realtime);
@@ -119,7 +158,7 @@ async function loadReport() {
     renderReport(report);
     setMode(report.mode);
     updateTimestamp(report.generatedAt);
-    $('syncLabel').textContent = report.stale ? 'Dados em cache' : 'Sincronizado';
+    reconcileTodaySources();
     if (report.warning) showToast('O GA4 atingiu um limite temporário; exibindo o último relatório válido.');
   } catch (error) {
     $('syncLabel').textContent = 'Falha na sincronização';
@@ -136,7 +175,7 @@ async function loadRealtime() {
     renderRealtime(realtime);
     setMode(realtime.mode);
     updateTimestamp(realtime.generatedAt);
-    $('syncLabel').textContent = realtime.stale ? 'Tempo real em cache' : 'Sincronizado';
+    reconcileTodaySources();
 
     if (previous !== null && realtime.summary.activeUsers > previous) {
       showToast(`Novo acesso detectado · ${fmt.format(realtime.summary.activeUsers)} usuários ativos`);
@@ -155,15 +194,16 @@ async function loadCounter() {
     state.counter = counter;
 
     if (!counter?.enabled) {
-      if (state.range === 'today') renderCounterFallback(counter);
+      reconcileTodaySources();
       return;
     }
 
     renderCounter(counter);
     updateTimestamp(counter.generatedAt);
-    $('syncLabel').textContent = 'Sincronizado';
+    reconcileTodaySources();
   } catch {
-    if (state.range === 'today') renderCounterFallback({ degraded: true });
+    state.counter = { enabled: false, degraded: true, source: 'ga4' };
+    reconcileTodaySources();
   }
 }
 
