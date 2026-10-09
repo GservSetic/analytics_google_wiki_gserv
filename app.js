@@ -215,21 +215,24 @@ function renderCounterFallback(counter = {}) {
   const lastHour = state.report.trend?.at(-1);
   const lastHourLabel = lastHour ? trendLabel(lastHour, 'hour') : null;
   const processedCaption = lastHourLabel
-    ? `GA4 · processado até aproximadamente ${lastHourLabel}`
-    : 'GA4 · processamento intradiário em andamento';
+    ? `GA4 consolidado somente até aproximadamente ${lastHourLabel}`
+    : 'GA4 intradiário ainda em processamento';
 
-  // O painel principal representa o dia atual já processado pelo GA4.
-  animateNumber($('metricUsers'), summary.activeUsers || 0);
-  animateNumber($('metricSessions'), summary.sessions || 0);
-  animateNumber($('metricViews'), summary.views || 0);
+  // Sem Redis não exibimos um total diário incompleto como se fosse o total real de hoje.
+  $('metricUsers').textContent = '—';
+  $('metricSessions').textContent = '—';
+  $('metricViews').textContent = '—';
+  delete $('metricUsers').dataset.value;
+  delete $('metricSessions').dataset.value;
+  delete $('metricViews').dataset.value;
 
   $('metricUsersLabel').textContent = 'Usuários ativos hoje';
   $('metricSessionsLabel').textContent = 'Sessões hoje';
   $('metricViewsLabel').textContent = 'Visualizações hoje';
 
-  $('metricUsersCaption').textContent = processedCaption;
-  $('metricSessionsCaption').textContent = processedCaption;
-  $('metricViewsCaption').textContent = processedCaption;
+  $('metricUsersCaption').textContent = 'Aguardando contador Redis · total diário';
+  $('metricSessionsCaption').textContent = 'Aguardando contador Redis · total diário';
+  $('metricViewsCaption').textContent = 'Aguardando contador Redis · total diário';
   $('metricEngagementCaption').textContent = processedCaption;
   $('metricTimeCaption').textContent = processedCaption;
 
@@ -239,21 +242,22 @@ function renderCounterFallback(counter = {}) {
   if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = processedCaption;
   if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = processedCaption;
 
-  // O gráfico de hoje também usa somente as horas já consolidadas.
   renderTrend(state.report.trend || [], 'hour', false);
 
   const liveUsers = live.activeUsers || 0;
   const liveViews = live.views || 0;
 
   $('smartSummaryText').textContent =
-    `Hoje, o GA4 já processou ${fmt.format(summary.activeUsers || 0)} usuários ativos, ${fmt.format(summary.sessions || 0)} sessões e ${fmt.format(summary.views || 0)} visualizações` +
-    (lastHourLabel ? ` até aproximadamente ${lastHourLabel}` : '') +
-    `. No Tempo Real, ${fmt.format(liveUsers)} usuários distintos estiveram ativos e ocorreram ${fmt.format(liveViews)} visualizações nos últimos 30 minutos.`;
+    `O total atualizado de hoje está temporariamente indisponível porque o contador Redis atingiu a cota mensal. ` +
+    `No GA4 Realtime, ${fmt.format(liveUsers)} usuários distintos estiveram ativos e ocorreram ${fmt.format(liveViews)} visualizações nos últimos 30 minutos. ` +
+    (lastHourLabel
+      ? `Como referência apenas, o GA4 intradiário já consolidou dados até aproximadamente ${lastHourLabel}, mas esses valores não representam o total atual do dia.`
+      : '');
 
   $('anomalyDetail').textContent =
-    'O contador próprio diário está temporariamente pausado pelo limite do Redis. Por isso, os indicadores de Hoje mostram o que o GA4 já consolidou, enquanto o bloco Tempo Real mostra uma janela móvel de 30 minutos.';
+    'Os cards diários serão preenchidos novamente pelo Redis quando o contador voltar. O Tempo Real continua válido e independente, usando diretamente o GA4 Realtime.';
 
-  $('syncLabel').textContent = 'GA4 ativo · contador em pausa';
+  $('syncLabel').textContent = 'GA4 ativo · Redis sem cota';
 }
 
 function renderReport(data) {
