@@ -4,8 +4,6 @@ const state = {
   realtime: null,
   timer: null,
   reportTimer: null,
-  counter: null,
-  counterTimer: null,
   lastRealtimeUsers: null,
   pageDetail: null,
   pageDetailRange: '7d',
@@ -98,11 +96,6 @@ function updateTimestamp(iso) {
 }
 
 function updateSyncStatus() {
-  if (state.counter?.degraded) {
-    $('syncLabel').textContent = 'GA4 ativo · contador em pausa';
-    return;
-  }
-
   if (state.realtime?.stale) {
     $('syncLabel').textContent = 'Tempo real em cache';
     return;
@@ -113,24 +106,34 @@ function updateSyncStatus() {
     return;
   }
 
-  $('syncLabel').textContent = 'Sincronizado';
+  $('syncLabel').textContent = 'GA4 sincronizado';
+}
+
+function todayProcessedCaption(report = state.report) {
+  const lastHour = report?.trend?.at(-1);
+  if (!lastHour) return 'GA4 · dados de hoje em processamento';
+  return `GA4 · processado até aproximadamente ${trendLabel(lastHour, 'hour')}`;
 }
 
 function reconcileTodaySources() {
-  if (state.range !== 'today') {
-    updateSyncStatus();
-    return;
-  }
-
-  if (state.counter?.enabled) {
-    renderCounter(state.counter);
-  } else if (state.counter?.degraded) {
-    renderCounterFallback(state.counter);
-  }
-
-  if (state.realtime && Array.isArray(state.realtime.events)) {
+  if (state.range === 'today' && state.realtime && Array.isArray(state.realtime.events)) {
     renderEvents(state.realtime.events, state.realtime.eventInstrumentationNote);
     if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = 'GA4 Realtime · últimos 30 min';
+  }
+
+  if (state.range === 'today' && state.report) {
+    const summary = state.report.summary || {};
+    const live = state.realtime?.summary || {};
+    const caption = todayProcessedCaption(state.report);
+
+    $('smartSummaryText').textContent =
+      `Hoje, o GA4 já processou ${fmt.format(summary.activeUsers || 0)} usuários ativos, ` +
+      `${fmt.format(summary.sessions || 0)} sessões e ${fmt.format(summary.views || 0)} visualizações. ` +
+      `No Tempo Real, ${fmt.format(live.activeUsers || 0)} usuários distintos estiveram ativos e ocorreram ` +
+      `${fmt.format(live.views || 0)} visualizações nos últimos 30 minutos.`;
+
+    $('anomalyDetail').textContent =
+      `${caption}. O relatório de Hoje pode ter algumas horas de atraso em relação ao GA4 Realtime; os dois blocos representam janelas diferentes.`;
   }
 
   updateSyncStatus();
@@ -188,111 +191,34 @@ async function loadRealtime() {
   }
 }
 
-async function loadCounter() {
-  try {
-    const counter = await getJson('/api/live-counter');
-    state.counter = counter;
-
-    if (!counter?.enabled) {
-      reconcileTodaySources();
-      return;
-    }
-
-    renderCounter(counter);
-    updateTimestamp(counter.generatedAt);
-    reconcileTodaySources();
-  } catch {
-    state.counter = { enabled: false, degraded: true, source: 'ga4' };
-    reconcileTodaySources();
-  }
-}
-
-function renderCounterFallback(counter = {}) {
-  if (state.range !== 'today' || !state.report) return;
-
-  const summary = state.report.summary || {};
-  const live = state.realtime?.summary || {};
-  const lastHour = state.report.trend?.at(-1);
-  const lastHourLabel = lastHour ? trendLabel(lastHour, 'hour') : null;
-  const processedCaption = lastHourLabel
-    ? `GA4 consolidado somente até aproximadamente ${lastHourLabel}`
-    : 'GA4 intradiário ainda em processamento';
-
-  // Sem Redis não exibimos um total diário incompleto como se fosse o total real de hoje.
-  $('metricUsers').textContent = '—';
-  $('metricSessions').textContent = '—';
-  $('metricViews').textContent = '—';
-  delete $('metricUsers').dataset.value;
-  delete $('metricSessions').dataset.value;
-  delete $('metricViews').dataset.value;
-
-  $('metricUsersLabel').textContent = 'Usuários ativos hoje';
-  $('metricSessionsLabel').textContent = 'Sessões hoje';
-  $('metricViewsLabel').textContent = 'Visualizações hoje';
-
-  $('metricUsersCaption').textContent = 'Aguardando BigQuery Streaming · total diário';
-  $('metricSessionsCaption').textContent = 'Aguardando BigQuery Streaming · total diário';
-  $('metricViewsCaption').textContent = 'Aguardando BigQuery Streaming · total diário';
-  $('metricEngagementCaption').textContent = processedCaption;
-  $('metricTimeCaption').textContent = processedCaption;
-
-  if ($('pagesSourceLabel')) $('pagesSourceLabel').textContent = processedCaption;
-  if ($('audienceSourceLabel')) $('audienceSourceLabel').textContent = processedCaption;
-  if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = processedCaption;
-  if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = processedCaption;
-  if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = processedCaption;
-
-  renderTrend(state.report.trend || [], 'hour', false);
-
-  const liveUsers = live.activeUsers || 0;
-  const liveViews = live.views || 0;
-
-  $('smartSummaryText').textContent =
-    `O total atualizado de hoje ainda está aguardando a exportação Streaming do GA4 para o BigQuery. ` +
-    `No GA4 Realtime, ${fmt.format(liveUsers)} usuários distintos estiveram ativos e ocorreram ${fmt.format(liveViews)} visualizações nos últimos 30 minutos. ` +
-    (lastHourLabel
-      ? `Como referência apenas, o GA4 intradiário já consolidou dados até aproximadamente ${lastHourLabel}, mas esses valores não representam o total atual do dia.`
-      : '');
-
-  $('anomalyDetail').textContent =
-    'Os cards diários serão preenchidos pelo BigQuery assim que a exportação Streaming estiver ativa. O Tempo Real continua válido e independente, usando diretamente o GA4 Realtime.';
-
-  $('syncLabel').textContent = 'GA4 ativo · BigQuery aguardando';
-}
-
 function renderReport(data) {
   const summary = data.summary || {};
+  const todayCaption = todayProcessedCaption(data);
+
   animateNumber($('metricUsers'), summary.activeUsers);
   animateNumber($('metricSessions'), summary.sessions);
   animateNumber($('metricViews'), summary.views);
   animateNumber($('metricEngagement'), (summary.engagementRate || 0) * 100, (n) => `${n.toFixed(1).replace('.', ',')}%`);
   animateNumber($('metricTime'), summary.avgEngagementSeconds || 0, (n) => formatSeconds(n));
 
-  $('metricUsersLabel').textContent = state.range === 'today' ? 'Usuários ativos' : 'Usuários';
-  $('metricSessionsLabel').textContent = 'Sessões';
-  $('metricViewsLabel').textContent = 'Visualizações';
-  $('metricUsersCaption').textContent = state.range === 'today'
-    ? 'GA4 · dados de hoje já processados'
-    : 'Usuários no período selecionado';
-  $('metricSessionsCaption').textContent = state.range === 'today'
-    ? 'GA4 · dados de hoje já processados'
-    : 'Sessões iniciadas no período';
-  $('metricViewsCaption').textContent = state.range === 'today'
-    ? 'GA4 · dados de hoje já processados'
-    : 'Visualizações de páginas';
-  $('metricEngagementCaption').textContent = state.range === 'today'
-    ? 'GA4 · dados de hoje já processados'
-    : 'Taxa de sessões engajadas';
-  $('metricTimeCaption').textContent = state.range === 'today'
-    ? 'GA4 · dados de hoje já processados'
-    : 'Engajamento por sessão';
+  $('metricUsersLabel').textContent = state.range === 'today' ? 'Usuários ativos hoje' : 'Usuários';
+  $('metricSessionsLabel').textContent = state.range === 'today' ? 'Sessões hoje' : 'Sessões';
+  $('metricViewsLabel').textContent = state.range === 'today' ? 'Visualizações hoje' : 'Visualizações';
 
-  if ($('pagesSourceLabel')) $('pagesSourceLabel').textContent = state.range === 'today' ? 'GA4 · processado' : 'por visualizações';
-  if ($('audienceSourceLabel')) $('audienceSourceLabel').textContent = state.range === 'today' ? 'GA4 · processado' : 'usuários';
-  if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = state.range === 'today' ? 'GA4 · processado' : 'clique na página para analisar';
-  if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = state.range === 'today' ? 'GA4 · processado' : 'usuários ativos';
-  if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = state.range === 'today' ? 'GA4 · dados processados' : 'sessões';
-  if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = state.range === 'today' ? 'GA4 · dados processados' : 'ações registradas';
+  $('metricUsersCaption').textContent = state.range === 'today' ? todayCaption : 'Usuários no período selecionado';
+  $('metricSessionsCaption').textContent = state.range === 'today' ? todayCaption : 'Sessões iniciadas no período';
+  $('metricViewsCaption').textContent = state.range === 'today' ? todayCaption : 'Visualizações de páginas';
+  $('metricEngagementCaption').textContent = state.range === 'today' ? todayCaption : 'Taxa de sessões engajadas';
+  $('metricTimeCaption').textContent = state.range === 'today' ? todayCaption : 'Engajamento por sessão';
+
+  if ($('pagesSourceLabel')) $('pagesSourceLabel').textContent = state.range === 'today' ? todayCaption : 'por visualizações';
+  if ($('audienceSourceLabel')) $('audienceSourceLabel').textContent = state.range === 'today' ? todayCaption : 'usuários';
+  if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = state.range === 'today' ? todayCaption : 'clique na página para analisar';
+  if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = state.range === 'today' ? todayCaption : 'usuários ativos';
+  if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = state.range === 'today' ? todayCaption : 'sessões';
+  if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = state.range === 'today'
+    ? 'GA4 Realtime · últimos 30 min'
+    : 'ações registradas';
 
   document.querySelectorAll('.metric-card').forEach((card) => card.classList.remove('counter-live'));
 
@@ -306,71 +232,12 @@ function renderReport(data) {
   renderDevices(data.devices || [], summary.activeUsers || 0);
   renderCities(data.cities || []);
 
-  if (state.counter?.enabled && state.range === 'today') {
-    renderCounter(state.counter);
-  } else if (state.range === 'today' && state.counter?.degraded) {
-    renderCounterFallback(state.counter);
-  }
-
   if (state.range === 'today' && state.realtime && Array.isArray(state.realtime.events)) {
     renderEvents(state.realtime.events, state.realtime.eventInstrumentationNote);
     if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = 'GA4 Realtime · últimos 30 min';
   }
-}
 
-function renderCounter(data) {
-  if (!data?.enabled || state.range !== 'today') return;
-
-  const today = data.today || {};
-  const coverage = data.coverage || {};
-  const realtime = state.realtime?.summary || {};
-
-  animateNumber($('metricUsers'), today.users || 0);
-  animateNumber($('metricSessions'), today.sessions || 0);
-  animateNumber($('metricViews'), today.views || 0);
-
-  $('metricUsersLabel').textContent = 'Usuários únicos hoje';
-  $('metricSessionsLabel').textContent = 'Sessões hoje';
-  $('metricViewsLabel').textContent = 'Visualizações hoje';
-
-  $('metricUsersCaption').textContent = 'BigQuery Streaming · atualização quase em tempo real';
-  $('metricSessionsCaption').textContent = 'BigQuery Streaming · atualização quase em tempo real';
-  $('metricViewsCaption').textContent = 'BigQuery Streaming · atualização quase em tempo real';
-
-  // Engajamento e tempo médio continuam no GA4: o contador próprio mede acesso,
-  // enquanto o GA4 é a fonte correta para métricas comportamentais.
-  $('metricEngagementCaption').textContent = 'GA4 · dados comportamentais processados';
-  $('metricTimeCaption').textContent = 'GA4 · dados comportamentais processados';
-
-  ['metricUsers', 'metricSessions', 'metricViews'].forEach((id) => {
-    $(id)?.closest('.metric-card')?.classList.add('counter-live');
-  });
-
-  if ($('pagesSourceLabel')) $('pagesSourceLabel').textContent = 'BigQuery Streaming · hoje';
-  if ($('audienceSourceLabel')) $('audienceSourceLabel').textContent = 'usuários únicos hoje';
-  if ($('engagementSourceLabel')) $('engagementSourceLabel').textContent = 'acessos: BigQuery · engajamento: GA4';
-  if ($('citiesSourceLabel')) $('citiesSourceLabel').textContent = 'usuários únicos hoje';
-  if ($('sourcesSourceLabel')) $('sourcesSourceLabel').textContent = 'sessões hoje · BigQuery';
-  if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = state.realtime && Array.isArray(state.realtime.events)
-    ? 'GA4 Realtime · últimos 30 min'
-    : 'GA4 · dados processados';
-
-  renderTrend(data.trend || [], 'hour', true);
-  renderPages(data.pages || []);
-  // O detalhamento de engajamento permanece com o GA4 já renderizado em renderReport().
-  renderDevices(data.devices || [], today.users || 0);
-  renderCities(data.cities || []);
-  renderSources(data.sources || []);
-
-  const topPage = data.pages?.[0];
-  $('smartSummaryText').textContent =
-    `Hoje, a Wiki registra ${fmt.format(today.users || 0)} usuários únicos, ${fmt.format(today.sessions || 0)} sessões e ${fmt.format(today.views || 0)} visualizações. ` +
-    `Nos últimos 30 minutos, o GA4 Realtime registra ${fmt.format(realtime.activeUsers || 0)} usuários ativos e ${fmt.format(realtime.views || 0)} visualizações.` +
-    (topPage ? ` A página com mais visualizações hoje é ${topPage.label || shortLabel(topPage.name)}, com ${fmt.format(topPage.views || 0)} visualizações.` : '');
-
-  $('anomalyDetail').textContent = coverage.completeDay === false
-    ? 'O BigQuery começou a receber dados após o início do dia; o primeiro dia pode ficar parcial.'
-    : 'Totais e detalhamentos de Hoje vêm do BigQuery Streaming; atividade dos últimos 30 minutos vem do GA4 Realtime.';
+  reconcileTodaySources();
 }
 
 function renderSmartSummary(data) {
@@ -1208,9 +1075,7 @@ function bindControls() {
       document.querySelectorAll('.trend-mode-btn').forEach((item) => item.classList.remove('active'));
       button.classList.add('active');
       state.trendMode = button.dataset.trendMode || 'both';
-      if (state.range === 'today' && state.counter?.enabled) {
-        renderTrend(state.counter.trend || [], 'hour', true);
-      } else if (state.report) {
+      if (state.report) {
         renderTrend(state.report.trend || state.report.daily || [], state.report.trendGranularity || 'day', false);
       }
     });
@@ -1261,11 +1126,10 @@ async function boot() {
   initEmbedMode();
   bindControls();
   initPremiumVisuals();
-  await Promise.all([loadReport(), loadRealtime(), loadCounter()]);
+  await Promise.all([loadReport(), loadRealtime()]);
   document.body.classList.add('premium-data-ready');
   state.timer = setInterval(loadRealtime, 60_000);
   state.reportTimer = setInterval(loadReport, 120_000);
-  state.counterTimer = setInterval(loadCounter, 60_000);
 }
 
 boot();
