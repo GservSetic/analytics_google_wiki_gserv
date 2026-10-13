@@ -25,11 +25,11 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Origem não permitida.' });
   }
 
-  // O contador próprio via Redis foi desativado.
-  // A coleta oficial agora é feita exclusivamente pelo GA4 e exportada ao BigQuery.
+  // Compatibilidade temporária para abas antigas que ainda possuam o tracker próprio em cache.
+  // A coleta oficial do Wiki Analytics é feita exclusivamente pelo Google Analytics 4.
   return res.status(202).json({
     ok: true,
     ignored: true,
-    source: 'ga4-bigquery'
+    source: 'ga4-only'
   });
 }
