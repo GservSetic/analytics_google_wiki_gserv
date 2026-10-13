@@ -92,7 +92,7 @@ export async function googleAccessToken() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        scope: [ANALYTICS_SCOPE, CLOUD_SCOPE],
+        scope: [ANALYTICS_SCOPE],
         lifetime: '3600s',
       }),
     },
