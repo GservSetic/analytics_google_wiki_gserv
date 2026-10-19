@@ -2,6 +2,11 @@ const state = {
   range: 'today',
   report: null,
   realtime: null,
+  reportRange: null,
+  reportStatus: 'loading',
+  realtimeStatus: 'loading',
+  reportRequestId: 0,
+  realtimeRequestId: 0,
   timer: null,
   reportTimer: null,
   lastRealtimeUsers: null,
@@ -67,6 +72,7 @@ function compact(value) {
 
 function animateNumber(el, next, formatter = (n) => fmt.format(Math.round(n))) {
   if (!el) return;
+  if (el._numberAnimation) cancelAnimationFrame(el._numberAnimation);
   const previous = Number(el.dataset.value || 0);
   const duration = 500;
   const started = performance.now();
@@ -77,11 +83,14 @@ function animateNumber(el, next, formatter = (n) => fmt.format(Math.round(n))) {
     const eased = 1 - Math.pow(1 - progress, 3);
     const current = previous + (target - previous) * eased;
     el.textContent = formatter(current);
-    if (progress < 1) requestAnimationFrame(frame);
-    else el.dataset.value = target;
+    if (progress < 1) el._numberAnimation = requestAnimationFrame(frame);
+    else {
+      el.dataset.value = target;
+      el._numberAnimation = null;
+    }
   }
 
-  requestAnimationFrame(frame);
+  el._numberAnimation = requestAnimationFrame(frame);
 }
 
 function setMode(mode) {
@@ -96,23 +105,57 @@ function updateTimestamp(iso) {
 }
 
 function updateSyncStatus() {
-  if (state.realtime?.stale) {
-    $('syncLabel').textContent = 'Tempo real em cache';
-    return;
+  const pill = document.querySelector('.sync-pill');
+  const hasCurrentReport = state.report && state.reportRange === state.range;
+  let status = 'ok';
+  let label = 'GA4 sincronizado';
+
+  if (state.reportStatus === 'error') {
+    status = 'error';
+    label = 'Falha no histórico';
+  } else if (state.realtimeStatus === 'error') {
+    status = 'error';
+    label = 'Tempo real indisponível';
+  } else if (state.reportStatus === 'stale' || state.realtimeStatus === 'stale') {
+    status = 'stale';
+    label = 'Dados em cache';
+  } else if (!hasCurrentReport || state.reportStatus === 'loading' || state.realtimeStatus === 'loading') {
+    status = 'loading';
+    label = 'Consultando GA4';
+  } else if (state.range === 'today' && state.report.dataAvailability === 'empty') {
+    status = 'pending';
+    label = 'Hoje sem consolidação';
   }
 
-  if (state.report?.stale) {
-    $('syncLabel').textContent = 'Dados em cache';
-    return;
+  if (pill) {
+    pill.dataset.status = status;
+    pill.title = 'Conectividade da API GA4. Não confirma, isoladamente, a instalação da tag na Wiki.js.';
   }
-
-  $('syncLabel').textContent = 'GA4 sincronizado';
+  $('syncLabel').textContent = label;
 }
 
 function todayProcessedCaption(report = state.report) {
+  if (report?.dataAvailability === 'empty') return 'GA4 · sem indicadores diários disponíveis';
   const lastHour = report?.trend?.at(-1);
-  if (!lastHour) return 'GA4 · dados de hoje em processamento';
-  return `GA4 · processado até aproximadamente ${trendLabel(lastHour, 'hour')}`;
+  if (!lastHour) return 'GA4 · sem intervalo horário disponível';
+  return `GA4 · último intervalo retornado: ${trendLabel(lastHour, 'hour')}`;
+}
+
+function updateTodayDataNotice() {
+  const notice = $('todayDataNotice');
+  if (!notice) return;
+  const noDailyData = state.range === 'today'
+    && state.reportRange === 'today'
+    && state.report?.dataAvailability === 'empty';
+  notice.hidden = !noDailyData;
+  if (!noDailyData) return;
+
+  const live = state.realtimeStatus !== 'error' ? state.realtime?.summary : null;
+  const liveViews = Number(live?.views || 0);
+  const liveUsers = Number(live?.activeUsers || 0);
+  $('todayDataNoticeText').textContent = liveViews > 0 || liveUsers > 0
+    ? `O relatório diário retornou sem indicadores. Já o GA4 Realtime registra ${fmt.format(liveUsers)} usuários e ${fmt.format(liveViews)} visualizações nos últimos 30 minutos. Os números não devem ser somados: o processamento e as janelas são diferentes.`
+    : 'O relatório diário retornou sem indicadores até esta consulta. Isso pode indicar atraso de processamento ou ausência de acessos; a disponibilidade do Tempo Real é verificada separadamente.';
 }
 
 function reconcileTodaySources() {
@@ -121,21 +164,31 @@ function reconcileTodaySources() {
     if ($('eventsSourceLabel')) $('eventsSourceLabel').textContent = 'GA4 Realtime · últimos 30 min';
   }
 
-  if (state.range === 'today' && state.report) {
+  if (state.range === 'today' && state.report && state.reportRange === 'today') {
     const summary = state.report.summary || {};
     const live = state.realtime?.summary || {};
     const caption = todayProcessedCaption(state.report);
+    const hasRealtime = state.realtime && state.realtimeStatus !== 'error';
 
-    $('smartSummaryText').textContent =
-      `Hoje, o GA4 já processou ${fmt.format(summary.activeUsers || 0)} usuários ativos, ` +
-      `${fmt.format(summary.sessions || 0)} sessões e ${fmt.format(summary.views || 0)} visualizações. ` +
-      `No Tempo Real, ${fmt.format(live.activeUsers || 0)} usuários distintos estiveram ativos e ocorreram ` +
-      `${fmt.format(live.views || 0)} visualizações nos últimos 30 minutos.`;
-
-    $('anomalyDetail').textContent =
-      `${caption}. O relatório de Hoje pode ter algumas horas de atraso em relação ao GA4 Realtime; os dois blocos representam janelas diferentes.`;
+    if (state.report.dataAvailability === 'empty') {
+      $('smartSummaryText').textContent = hasRealtime
+        ? `O relatório diário ainda não retornou indicadores para Hoje. No GA4 Realtime, ${fmt.format(live.activeUsers || 0)} usuários estiveram ativos e ocorreram ${fmt.format(live.views || 0)} visualizações nos últimos 30 minutos.`
+        : 'O relatório diário ainda não retornou indicadores para Hoje. A coleta em tempo real é verificada de forma independente.';
+      $('anomalyDetail').textContent =
+        'Não há dados suficientes no relatório diário para avaliar o movimento de Hoje. A ausência de indicadores não comprova ausência de acessos.';
+    } else {
+      $('smartSummaryText').textContent =
+        `Hoje, o relatório GA4 apresenta ${fmt.format(summary.activeUsers || 0)} usuários ativos, ` +
+        `${fmt.format(summary.sessions || 0)} sessões e ${fmt.format(summary.views || 0)} visualizações. ` +
+        (hasRealtime
+          ? `No Tempo Real, ${fmt.format(live.activeUsers || 0)} usuários estiveram ativos e ocorreram ${fmt.format(live.views || 0)} visualizações nos últimos 30 minutos.`
+          : 'O Tempo Real está temporariamente indisponível.');
+      $('anomalyDetail').textContent =
+        `${caption}. O relatório diário e o Tempo Real representam janelas e estágios de processamento distintos.`;
+    }
   }
 
+  updateTodayDataNotice();
   updateSyncStatus();
 }
 
@@ -154,26 +207,38 @@ async function getJson(url) {
 }
 
 async function loadReport() {
-  $('syncLabel').textContent = 'Sincronizando';
+  const requestedRange = state.range;
+  const requestId = ++state.reportRequestId;
+  state.reportStatus = 'loading';
+  updateSyncStatus();
+
   try {
-    const report = await getJson(`/api/report?range=${encodeURIComponent(state.range)}`);
+    const report = await getJson(`/api/report?range=${encodeURIComponent(requestedRange)}`);
+    if (requestId !== state.reportRequestId || requestedRange !== state.range) return;
     state.report = report;
+    state.reportRange = requestedRange;
+    state.reportStatus = report.stale ? 'stale' : 'ok';
     renderReport(report);
     setMode(report.mode);
     updateTimestamp(report.generatedAt);
     reconcileTodaySources();
-    if (report.warning) showToast('O GA4 atingiu um limite temporário; exibindo o último relatório válido.');
+    if (report.warning) showToast('Histórico do GA4 em cache: não foi possível obter dados mais recentes.');
   } catch (error) {
-    $('syncLabel').textContent = 'Falha na sincronização';
+    if (requestId !== state.reportRequestId || requestedRange !== state.range) return;
+    state.reportStatus = 'error';
+    updateSyncStatus();
     showToast(error.message);
   }
 }
 
 async function loadRealtime() {
+  const requestId = ++state.realtimeRequestId;
   try {
     const realtime = await getJson('/api/realtime');
+    if (requestId !== state.realtimeRequestId) return;
     const previous = state.lastRealtimeUsers;
     state.realtime = realtime;
+    state.realtimeStatus = realtime.stale ? 'stale' : 'ok';
     state.lastRealtimeUsers = realtime.summary.activeUsers;
     renderRealtime(realtime);
     setMode(realtime.mode);
@@ -186,7 +251,9 @@ async function loadRealtime() {
       premiumPulse('.live-pages-panel');
     }
   } catch (error) {
-    $('syncLabel').textContent = 'Reconectando';
+    if (requestId !== state.realtimeRequestId) return;
+    state.realtimeStatus = 'error';
+    reconcileTodaySources();
     showToast(error.message);
   }
 }
@@ -195,11 +262,22 @@ function renderReport(data) {
   const summary = data.summary || {};
   const todayCaption = todayProcessedCaption(data);
 
-  animateNumber($('metricUsers'), summary.activeUsers);
-  animateNumber($('metricSessions'), summary.sessions);
-  animateNumber($('metricViews'), summary.views);
-  animateNumber($('metricEngagement'), (summary.engagementRate || 0) * 100, (n) => `${n.toFixed(1).replace('.', ',')}%`);
-  animateNumber($('metricTime'), summary.avgEngagementSeconds || 0, (n) => formatSeconds(n));
+  const noDailyData = state.range === 'today' && data.dataAvailability === 'empty';
+  if (noDailyData) {
+    ['metricUsers', 'metricSessions', 'metricViews', 'metricEngagement', 'metricTime'].forEach((id) => {
+      const el = $(id);
+      if (el._numberAnimation) cancelAnimationFrame(el._numberAnimation);
+      el._numberAnimation = null;
+      delete el.dataset.value;
+      el.textContent = '—';
+    });
+  } else {
+    animateNumber($('metricUsers'), summary.activeUsers);
+    animateNumber($('metricSessions'), summary.sessions);
+    animateNumber($('metricViews'), summary.views);
+    animateNumber($('metricEngagement'), (summary.engagementRate || 0) * 100, (n) => `${n.toFixed(1).replace('.', ',')}%`);
+    animateNumber($('metricTime'), summary.avgEngagementSeconds || 0, (n) => formatSeconds(n));
+  }
 
   $('metricUsersLabel').textContent = state.range === 'today' ? 'Usuários ativos hoje' : 'Usuários';
   $('metricSessionsLabel').textContent = state.range === 'today' ? 'Sessões hoje' : 'Sessões';
@@ -1086,6 +1164,7 @@ function bindControls() {
       document.querySelectorAll('.range-btn').forEach((item) => item.classList.remove('active'));
       button.classList.add('active');
       state.range = button.dataset.range;
+      updateTodayDataNotice();
       loadReport();
     });
   });
