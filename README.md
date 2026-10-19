@@ -29,7 +29,7 @@ npx vercel dev
 5. Configure as variáveis de ambiente:
 
 ```env
-GA_PROPERTY_ID=554924878
+GA_PROPERTY_ID=558035356
 GA_CLIENT_EMAIL=...
 GA_PRIVATE_KEY=...
 ```
@@ -55,4 +55,6 @@ Depois do deploy, use um iframe na página desejada:
 
 - Tempo real: a interface consulta `/api/realtime` a cada 15 segundos.
 - Histórico: o período é consultado ao trocar entre Hoje, 7 dias e 30 dias.
+- Se o relatório de Hoje vier sem indicadores, o painel mostra um aviso de disponibilidade em vez de apresentar zeros como confirmação de ausência de acessos. O Tempo Real (30 min) permanece separado.
+- O status de conexão distingue relatório histórico, Tempo Real, cache e falhas. Para validar a instalação da tag GA4, confira também o código da Wiki.js e o fluxo de dados da propriedade.
 - O GA4 Realtime representa atividade dos minutos mais recentes; não é um sistema de identificação individual de visitantes.
