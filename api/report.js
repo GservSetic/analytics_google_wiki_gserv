@@ -531,6 +531,11 @@ export default async function handler(req, res) {
       engagementRate: summaryRow.engagementRate || 0,
       avgEngagementSeconds: summaryRow.averageEngagementTimePerSession || 0
     };
+    // Sem linhas/métricas disponíveis não significa que ninguém acessou a Wiki.
+    // Não misturar totais diários com a janela independente do GA4 Realtime.
+    const hasDailyMetrics = [summary.activeUsers, summary.sessions, summary.views].some((value) => value > 0)
+      || trend.some((item) => item.activeUsers > 0 || item.sessions > 0 || item.views > 0);
+    const dataAvailability = range === 'today' && !hasDailyMetrics ? 'empty' : 'available';
     const anomaly = detectAnomaly(heatmapReport);
     const sources = rows(sourcesReport).map((item) => ({
       name: item.sessionSourceMedium,
@@ -544,6 +549,12 @@ export default async function handler(req, res) {
       mode: 'live',
       range,
       generatedAt: new Date().toISOString(),
+      dataAvailability,
+      diagnostics: {
+        source: 'ga4-data-api',
+        dailySummaryRows: summaryReport.rows?.length || 0,
+        dailyTrendRows: trendReport.rows?.length || 0
+      },
       summary,
       smartSummary: buildSmartSummary(range, summary, trend, pages, devices, anomaly),
       anomaly,
