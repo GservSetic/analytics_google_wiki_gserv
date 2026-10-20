@@ -122,9 +122,9 @@ function updateSyncStatus() {
   } else if (!hasCurrentReport || state.reportStatus === 'loading' || state.realtimeStatus === 'loading') {
     status = 'loading';
     label = 'Consultando GA4';
-  } else if (state.range === 'today' && state.report.dataAvailability === 'empty') {
+  } else if (state.range === 'today') {
     status = 'pending';
-    label = 'Hoje sem consolidação';
+    label = state.report.dataAvailability === 'empty' ? 'Hoje sem indicadores' : 'GA4 conectado · Hoje parcial';
   }
 
   if (pill) {
@@ -138,24 +138,32 @@ function todayProcessedCaption(report = state.report) {
   if (report?.dataAvailability === 'empty') return 'GA4 · sem indicadores diários disponíveis';
   const lastHour = report?.trend?.at(-1);
   if (!lastHour) return 'GA4 · sem intervalo horário disponível';
-  return `GA4 · último intervalo retornado: ${trendLabel(lastHour, 'hour')}`;
+  return `GA4 · dados parciais · última hora com registros: ${trendLabel(lastHour, 'hour')}`;
 }
 
 function updateTodayDataNotice() {
   const notice = $('todayDataNotice');
   if (!notice) return;
-  const noDailyData = state.range === 'today'
-    && state.reportRange === 'today'
-    && state.report?.dataAvailability === 'empty';
-  notice.hidden = !noDailyData;
-  if (!noDailyData) return;
+  const hasTodayReport = state.range === 'today' && state.reportRange === 'today' && !!state.report;
+  notice.hidden = !hasTodayReport;
+  if (!hasTodayReport) return;
 
+  const empty = state.report.dataAvailability === 'empty';
+  const heading = $('todayDataNoticeHeading');
+  if (heading) heading.textContent = empty ? 'Relatório de Hoje sem indicadores' : 'Relatório de Hoje ainda é parcial';
+
+  const lastHour = state.report.trend?.at(-1);
+  const lastHourText = lastHour ? ` A última hora com registros na consulta foi ${trendLabel(lastHour, 'hour')}; isso não comprova que o dia esteja inteiramente processado.` : '';
   const live = state.realtimeStatus !== 'error' ? state.realtime?.summary : null;
-  const liveViews = Number(live?.views || 0);
-  const liveUsers = Number(live?.activeUsers || 0);
-  $('todayDataNoticeText').textContent = liveViews > 0 || liveUsers > 0
-    ? `O relatório diário retornou sem indicadores. Já o GA4 Realtime registra ${fmt.format(liveUsers)} usuários e ${fmt.format(liveViews)} visualizações nos últimos 30 minutos. Os números não devem ser somados: o processamento e as janelas são diferentes.`
-    : 'O relatório diário retornou sem indicadores até esta consulta. Isso pode indicar atraso de processamento ou ausência de acessos; a disponibilidade do Tempo Real é verificada separadamente.';
+  const liveText = live
+    ? ` O Tempo Real indica ${fmt.format(Number(live.activeUsers || 0))} usuários e ${fmt.format(Number(live.views || 0))} visualizações nos últimos 30 minutos.`
+    : ' O Tempo Real está sendo consultado separadamente.';
+
+  $('todayDataNoticeText').textContent = (empty
+    ? 'O GA4 ainda não retornou indicadores para o dia.'
+    : 'Os números exibidos são os que o GA4 disponibilizou até esta consulta, e ainda podem aumentar.')
+    + lastHourText + liveText
+    + ' As duas janelas não são equivalentes e não devem ser somadas.';
 }
 
 function reconcileTodaySources() {
@@ -178,7 +186,7 @@ function reconcileTodaySources() {
         'Não há dados suficientes no relatório diário para avaliar o movimento de Hoje. A ausência de indicadores não comprova ausência de acessos.';
     } else {
       $('smartSummaryText').textContent =
-        `Hoje, o relatório GA4 apresenta ${fmt.format(summary.activeUsers || 0)} usuários ativos, ` +
+        `Parcial de Hoje (GA4): ${fmt.format(summary.activeUsers || 0)} usuários ativos, ` +
         `${fmt.format(summary.sessions || 0)} sessões e ${fmt.format(summary.views || 0)} visualizações. ` +
         (hasRealtime
           ? `No Tempo Real, ${fmt.format(live.activeUsers || 0)} usuários estiveram ativos e ocorreram ${fmt.format(live.views || 0)} visualizações nos últimos 30 minutos.`
@@ -323,12 +331,15 @@ function renderSmartSummary(data) {
   const anomaly = data.anomaly || { status: 'normal', title: 'Monitoramento normal', detail: 'Sem alterações relevantes.' };
   const badge = $('anomalyBadge');
 
-  badge.className = `anomaly-badge ${anomaly.status || 'normal'}`;
-  badge.textContent = anomaly.status === 'spike'
-    ? 'Pico detectado'
-    : anomaly.status === 'drop'
-      ? 'Queda detectada'
-      : 'Monitoramento normal';
+  const todayPartial = state.range === 'today';
+  badge.className = `anomaly-badge ${todayPartial ? 'pending' : (anomaly.status || 'normal')}`;
+  badge.textContent = todayPartial
+    ? 'Hoje em processamento'
+    : anomaly.status === 'spike'
+      ? 'Pico detectado'
+      : anomaly.status === 'drop'
+        ? 'Queda detectada'
+        : 'Monitoramento normal';
 
   $('anomalyDetail').textContent = anomaly.detail || '';
   $('smartSummaryCard').classList.toggle('has-anomaly', anomaly.status === 'spike' || anomaly.status === 'drop');
@@ -686,12 +697,12 @@ function renderTrend(list, granularity = 'day', currentHourLive = false) {
   const mode = state.trendMode || 'both';
 
   $('trendTitle').textContent = isHourly
-    ? (currentHourLive ? 'Movimento de acessos ao longo do dia' : 'Horas já processadas de hoje')
+    ? (currentHourLive ? 'Movimento de acessos ao longo do dia' : 'Horas com registros retornados hoje')
     : 'Evolução dos acessos no período';
   $('trendSubtitle').textContent = isHourly
     ? (currentHourLive
         ? 'Movimento de hoje por hora, atualizado pelo contador próprio.'
-        : 'Horas já processadas pelo GA4. A atividade atual aparece no painel Tempo real.')
+        : 'Dados parciais por hora retornados pelo GA4; o movimento atual aparece no Tempo Real.')
     : 'Compare visualizações e usuários ao longo do período selecionado.';
 
   const peakIndex = list.reduce((best, row, index) => (row.views || 0) > (list[best]?.views || -1) ? index : best, 0);
@@ -737,7 +748,7 @@ function renderTrend(list, granularity = 'day', currentHourLive = false) {
   $('trendExplanation').innerHTML = isHourly
     ? currentHourLive
       ? `<strong>Como ler:</strong> as barras representam visualizações e a linha azul representa usuários únicos por hora. ${partialLabel ? `<span class="partial-note">${escapeHtml(partialLabel)} está em andamento e ainda pode aumentar.</span>` : ''}`
-      : `<strong>Dados processados:</strong> este gráfico mostra somente as horas já consolidadas pelo GA4${processedUntil ? `, até aproximadamente ${escapeHtml(processedUntil)}` : ''}. Para o movimento atual, use o painel Tempo real.`
+      : `<strong>Dados parciais:</strong> este gráfico exibe somente as horas com registros retornados pelo GA4${processedUntil ? `. Última hora com registros: ${escapeHtml(processedUntil)}` : ''}. Isso não comprova a conclusão do processamento diário. Acompanhe a atividade recente no Tempo Real.`
     : `<strong>Como ler:</strong> as barras representam visualizações e a linha azul representa usuários. ${firstDate ? `A nova propriedade possui histórico a partir de ${escapeHtml(firstDate)}.` : ''} ${partialLabel ? `<span class="partial-note">${escapeHtml(partialLabel)} é o dia atual e ainda está parcial.</span>` : ''}`;
 
   const width = 760;
