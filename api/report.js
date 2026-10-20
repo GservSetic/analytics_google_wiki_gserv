@@ -552,6 +552,11 @@ export default async function handler(req, res) {
       dataAvailability,
       diagnostics: {
         source: 'ga4-data-api',
+        propertyTimeZone: summaryReport.metadata?.timeZone || trendReport.metadata?.timeZone || null,
+        summaryEmptyReason: summaryReport.metadata?.emptyReason || null,
+        trendEmptyReason: trendReport.metadata?.emptyReason || null,
+        summarySubjectToThresholding: summaryReport.metadata?.subjectToThresholding === true,
+        trendSubjectToThresholding: trendReport.metadata?.subjectToThresholding === true,
         dailySummaryRows: summaryReport.rows?.length || 0,
         dailyTrendRows: trendReport.rows?.length || 0
       },
