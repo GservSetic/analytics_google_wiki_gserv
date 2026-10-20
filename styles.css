@@ -939,6 +939,8 @@ body.premium-dashboard::before {
   border-color: #d8f0e4;
 }
 .anomaly-badge.normal::before { background: #1ab66f; }
+.anomaly-badge.pending { background: #fff8e9; color: #8b661e; border-color: #f1e2bf; }
+.anomaly-badge.pending::before { background: #d79d30; }
 .anomaly-badge.spike {
   color: #9a5a08;
   background: #fff8ea;
